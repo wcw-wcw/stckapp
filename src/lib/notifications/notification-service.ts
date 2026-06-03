@@ -2,6 +2,7 @@ import type {
   NotificationChannel,
   NotificationChannelType,
 } from "@/lib/db/repositories";
+import { loadServerEnv } from "@/lib/config/env";
 import type { SupportedSymbol } from "@/lib/rules/types";
 
 export type NotificationMessage = {
@@ -27,13 +28,12 @@ const providerLabels: Record<NotificationChannelType, string> = {
   discord_webhook: "mock-discord-webhook",
 };
 
-export function realNotificationsEnabled() {
-  return process.env.ENABLE_REAL_NOTIFICATIONS === "true";
+export function realNotificationsEnabled(env: NodeJS.ProcessEnv = process.env) {
+  return loadServerEnv(env).ENABLE_REAL_NOTIFICATIONS;
 }
 
-export function globalDailyNotificationLimit() {
-  const value = Number(process.env.GLOBAL_DAILY_NOTIFICATION_LIMIT ?? 100);
-  return Number.isFinite(value) && value >= 0 ? value : 100;
+export function globalDailyNotificationLimit(env: NodeJS.ProcessEnv = process.env) {
+  return loadServerEnv(env).GLOBAL_DAILY_NOTIFICATION_LIMIT;
 }
 
 export function maskNotificationDestination(type: NotificationChannelType, destination: string) {

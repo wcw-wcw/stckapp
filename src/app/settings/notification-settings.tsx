@@ -4,6 +4,7 @@ import { useState } from "react";
 import type {
   NotificationChannel,
   NotificationLog,
+  UserNotificationPreferences,
 } from "@/lib/db/repositories";
 
 const typeLabels: Record<NotificationChannel["type"], string> = {
@@ -35,15 +36,18 @@ function displayDestination(channel: Pick<NotificationChannel, "type" | "destina
 export function NotificationSettings({
   initialChannels,
   initialLogs,
+  initialPreferences,
   userEmail,
   realNotificationsEnabled,
 }: {
   initialChannels: NotificationChannel[];
   initialLogs: NotificationLog[];
+  initialPreferences: UserNotificationPreferences;
   userEmail: string;
   realNotificationsEnabled: boolean;
 }) {
   const [channels, setChannels] = useState(initialChannels);
+  const [preferences, setPreferences] = useState(initialPreferences);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [phoneCode, setPhoneCode] = useState("");
   const [mockCode, setMockCode] = useState("");
@@ -168,8 +172,49 @@ export function NotificationSettings({
     }
   }
 
+  async function toggleAccountPause() {
+    setBusy("account-pause");
+    try {
+      const payload = await requestJson("/api/notifications/preferences", {
+        method: "PATCH",
+        body: JSON.stringify({ notificationsPaused: !preferences.notificationsPaused }),
+      });
+      setPreferences(payload.preferences);
+      setMessage(
+        payload.preferences.notificationsPaused
+          ? "Automatic alert notifications are paused. Manual channel tests still run."
+          : "Automatic alert notifications are resumed.",
+      );
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not update notification pause.");
+    } finally {
+      setBusy(undefined);
+    }
+  }
+
   return (
     <div className="grid profile-grid">
+      <section className="card profile-wide">
+        <div className="card-header">
+          <h2>Account notification pause</h2>
+          <span className={preferences.notificationsPaused ? "pill pill-warning" : "pill"}>
+            {preferences.notificationsPaused ? "paused" : "active"}
+          </span>
+        </div>
+        <p className="small">
+          This pauses automatic rule-triggered alert delivery across every channel. Alert events are still recorded, channel-level pause settings stay unchanged, and manual Test actions remain available.
+        </p>
+        <div className="action-row">
+          <button
+            className={preferences.notificationsPaused ? "button" : "button button-secondary"}
+            disabled={busy === "account-pause"}
+            onClick={toggleAccountPause}
+          >
+            {preferences.notificationsPaused ? "Resume all alert notifications" : "Pause all alert notifications"}
+          </button>
+        </div>
+      </section>
+
       <section className="card">
         <div className="card-header">
           <h2>Notification channels</h2>

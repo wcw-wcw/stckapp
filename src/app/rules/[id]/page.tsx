@@ -7,7 +7,7 @@ import {
   upsertBacktestResult,
   type CachedBacktestResult,
 } from "@/lib/db/repositories";
-import { configuredMarketDataProvider, marketData } from "@/lib/market/provider";
+import { activeMarketDataProvider, marketData } from "@/lib/market/provider";
 import { backtestRule } from "@/lib/rules/backtest";
 import { previewRule } from "@/lib/rules/preview";
 import type { AlertRule } from "@/lib/rules/types";
@@ -63,7 +63,7 @@ export default async function RuleDetailPage({
 }) {
   const user = await requireUser();
   const { id } = await params;
-  const rule = getRule(user.id, id);
+  const rule = await getRule(user.id, id);
   if (!rule) notFound();
 
   const rangeResults = await Promise.all(
@@ -85,7 +85,7 @@ export default async function RuleDetailPage({
     (result): result is RangeBacktestFailure => Boolean(result && "error" in result),
   );
   const primary = summaries.find((summary) => summary.rangeLabel === "1M") ?? summaries[0];
-  const alerts = listRuleAlertEvents(user.id, id, 20);
+  const alerts = await listRuleAlertEvents(user.id, id, 20);
 
   return (
     <div className="page">
@@ -179,7 +179,7 @@ export default async function RuleDetailPage({
             <p className="empty-state">No backtest summary available.</p>
           )}
           <div className="notice" style={{ marginTop: "1rem" }}>
-            {configuredMarketDataProvider === "alpaca"
+            {activeMarketDataProvider === "alpaca"
               ? "These summaries use Alpaca IEX historical bars when available. IEX data can differ from consolidated market feeds."
               : "These are deterministic mock candles. This page is the evidence shape we will reuse once real historical data is connected."}
           </div>

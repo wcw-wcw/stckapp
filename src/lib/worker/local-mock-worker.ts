@@ -1,10 +1,11 @@
 import { buildIndicatorStates, isMarketHours } from "@/lib/market/indicators";
-import { configuredMarketDataProvider, marketData } from "@/lib/market/provider";
+import { activeMarketDataProvider, marketData } from "@/lib/market/provider";
 import {
   createAlertEvent,
   createNotificationLog,
   createProviderErrorLog,
   countNotificationAttemptsToday,
+  getUserNotificationPreferences,
   incrementNotificationChannelCount,
   getReplayDataset,
   listEnabledNotificationChannels,
@@ -53,7 +54,7 @@ export type WorkerReplayResult = WorkerTickResult & {
 };
 
 const horizons = [5, 15, 30, 60] as const;
-const workerMode = configuredMarketDataProvider === "alpaca" ? "live" : "mock";
+const workerMode = activeMarketDataProvider === "alpaca" ? "live" : "mock";
 const providerBackoffBySymbol = new Map<
   SupportedSymbol,
   { failures: number; nextRetryAt: string; lastError: string }
@@ -79,23 +80,24 @@ export function calculateAvailablePerformance(
 
 async function updatePendingPerformance() {
   let updated = 0;
-  const pendingBySymbol = listPendingAlertEvents().reduce(
+  const pendingEvents = await listPendingAlertEvents();
+  const pendingBySymbol = pendingEvents.reduce(
     (groups, event) => {
       groups[event.symbol] = [...(groups[event.symbol] ?? []), event];
       return groups;
     },
-    {} as Record<SupportedSymbol, ReturnType<typeof listPendingAlertEvents>>,
+    {} as Record<SupportedSymbol, typeof pendingEvents>,
   );
 
   for (const [symbol, events] of Object.entries(pendingBySymbol) as Array<
-    [SupportedSymbol, ReturnType<typeof listPendingAlertEvents>]
+    [SupportedSymbol, typeof pendingEvents]
   >) {
     try {
       const candles = await marketData.getHistoricalCandles(symbol, 120);
       for (const event of events) {
         const performance = calculateAvailablePerformance(candles, event);
         if (Object.keys(performance).length) {
-          updateAlertPerformance(event.id, performance);
+          await updateAlertPerformance(event.id, performance);
           updated += 1;
         }
       }
@@ -109,13 +111,23 @@ async function updatePendingPerformance() {
 
 export async function sendRuleNotifications(rule: WorkerRule, state: IndicatorState, eventId: string) {
   if (!rule.smsEnabled) {
-    setAlertNotificationStatus(eventId, "not_sent");
+    await setAlertNotificationStatus(eventId, "not_sent");
     return 0;
   }
 
-  const channels = listEnabledNotificationChannels(rule.userId);
+  const preferences = await getUserNotificationPreferences(rule.userId);
+  if (preferences.notificationsPaused) {
+    await setAlertNotificationStatus(
+      eventId,
+      "skipped_account_paused",
+      "Account notification pause is enabled.",
+    );
+    return 0;
+  }
+
+  const channels = await listEnabledNotificationChannels(rule.userId);
   if (!channels.length) {
-    setAlertNotificationStatus(eventId, "skipped_no_verified_channel");
+    await setAlertNotificationStatus(eventId, "skipped_no_verified_channel");
     return 0;
   }
 
@@ -130,8 +142,8 @@ export async function sendRuleNotifications(rule: WorkerRule, state: IndicatorSt
   let skipped = 0;
 
   for (const channel of channels) {
-    if (countNotificationAttemptsToday() >= globalDailyNotificationLimit()) {
-      createNotificationLog({
+    if ((await countNotificationAttemptsToday()) >= globalDailyNotificationLimit()) {
+      await createNotificationLog({
         userId: rule.userId,
         alertEventId: eventId,
         channelId: channel.id,
@@ -147,7 +159,7 @@ export async function sendRuleNotifications(rule: WorkerRule, state: IndicatorSt
     }
 
     const result = await notifications.send({ channel, ...message });
-    createNotificationLog({
+    await createNotificationLog({
       userId: rule.userId,
       alertEventId: eventId,
       channelId: channel.id,
@@ -160,13 +172,13 @@ export async function sendRuleNotifications(rule: WorkerRule, state: IndicatorSt
     });
     if (result.status === "sent") {
       sent += 1;
-      incrementNotificationChannelCount(channel.id);
+      await incrementNotificationChannelCount(channel.id);
     } else {
       failed += 1;
     }
   }
 
-  setAlertNotificationStatus(
+  await setAlertNotificationStatus(
     eventId,
     sent > 0 ? "sent" : skipped > 0 && failed === 0 ? "skipped_global_limit" : "failed",
     failed ? "One or more mock deliveries failed." : skipped ? "Global daily notification limit reached." : undefined,
@@ -210,7 +222,7 @@ export function getLiveWorkerBackoffStatus() {
 }
 
 export async function runLocalMockWorkerTick(input?: { continuous?: boolean }): Promise<WorkerTickResult> {
-  const rules = listActiveWorkerRules();
+  const rules = await listActiveWorkerRules();
   const grouped = groupActiveRules(rules);
   const eventIds: string[] = [];
   let skippedCooldown = 0;
@@ -249,8 +261,8 @@ export async function runLocalMockWorkerTick(input?: { continuous?: boolean }): 
         if ((error as ProviderDataError | undefined)?.issue === "stale") {
           lastError = `${symbol}: provider data is stale; retrying at ${backoff.nextRetryAt}.`;
         }
-        createProviderErrorLog({
-          provider: configuredMarketDataProvider,
+        await createProviderErrorLog({
+          provider: activeMarketDataProvider,
           symbol,
           context: "worker-tick",
           message: lastError,
@@ -267,13 +279,13 @@ export async function runLocalMockWorkerTick(input?: { continuous?: boolean }): 
           skippedCooldown += 1;
           continue;
         }
-        const eventId = createAlertEvent(rule, current, previewRule(rule));
+        const eventId = await createAlertEvent(rule, current, previewRule(rule));
         if (!eventId) continue;
         notificationAttempts += await sendRuleNotifications(rule, current, eventId);
         eventIds.push(eventId);
       }
     }
-    recordWorkerTickStatus({
+    await recordWorkerTickStatus({
       status: input?.continuous ? "running" : "idle",
       mode: workerMode,
       lastCandleAt,
@@ -299,7 +311,7 @@ export async function runLocalMockWorkerTick(input?: { continuous?: boolean }): 
       eventIds,
     };
   } catch (error) {
-    updateWorkerStatus("error", error instanceof Error ? error.message : "Unknown worker error");
+    await updateWorkerStatus("error", error instanceof Error ? error.message : "Unknown worker error");
     throw error;
   }
 }
@@ -309,7 +321,7 @@ async function replayCandlesForRules(
   candlesBySymbol: Map<SupportedSymbol, Candle[]>,
   replayCandles: number,
 ) {
-  const rules = listActiveWorkerRulesForUser(userId);
+  const rules = await listActiveWorkerRulesForUser(userId);
   const replaySymbols = new Set(candlesBySymbol.keys());
   const grouped = Object.fromEntries(
     Object.entries(groupActiveRules(rules)).filter(([key]) =>
@@ -351,13 +363,13 @@ async function replayCandlesForRules(
             continue;
           }
 
-          const eventId = createAlertEvent(rule, current, previewRule(rule));
+          const eventId = await createAlertEvent(rule, current, previewRule(rule));
           if (!eventId) continue;
           const performance = calculateAvailablePerformance(candles, {
             triggeredAt: current.timestamp,
             triggerPrice: current.price,
           });
-          if (Object.keys(performance).length) updateAlertPerformance(eventId, performance);
+          if (Object.keys(performance).length) await updateAlertPerformance(eventId, performance);
           await sendRuleNotifications(rule, current, eventId);
           eventIds.push(eventId);
           lastTriggeredByRule.set(rule.id, current.timestamp);
@@ -365,7 +377,7 @@ async function replayCandlesForRules(
       }
     }
 
-    updateWorkerStatus("idle");
+    await updateWorkerStatus("idle");
     return {
       evaluatedSymbols,
       evaluatedRules,
@@ -378,13 +390,13 @@ async function replayCandlesForRules(
       replayCandles,
     };
   } catch (error) {
-    updateWorkerStatus("error", error instanceof Error ? error.message : "Unknown replay error");
+    await updateWorkerStatus("error", error instanceof Error ? error.message : "Unknown replay error");
     throw error;
   }
 }
 
 export async function runLocalReplay(userId: string, candleCount = 390): Promise<WorkerReplayResult> {
-  const rules = listActiveWorkerRulesForUser(userId);
+  const rules = await listActiveWorkerRulesForUser(userId);
   const symbols = new Set(rules.map((rule) => rule.symbol));
   const candlesBySymbol = new Map<SupportedSymbol, Candle[]>();
   for (const symbol of symbols) {
@@ -394,7 +406,7 @@ export async function runLocalReplay(userId: string, candleCount = 390): Promise
 }
 
 export async function runReplayDataset(userId: string, datasetId: string) {
-  const dataset = getReplayDataset(userId, datasetId);
+  const dataset = await getReplayDataset(userId, datasetId);
   if (!dataset) throw new Error("Replay dataset not found.");
   return replayCandlesForRules(
     userId,

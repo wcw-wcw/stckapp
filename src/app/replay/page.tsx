@@ -4,6 +4,7 @@ import { ReplayLab } from "./replay-lab";
 
 export default async function ReplayPage() {
   const user = await requireUser();
+  const datasets = await listReplayDatasets(user.id);
   return (
     <div className="page">
       <div className="page-header">
@@ -17,7 +18,7 @@ export default async function ReplayPage() {
           </p>
         </div>
       </div>
-      <ReplayLab initialDatasets={listReplayDatasets(user.id)} />
+      <ReplayLab initialDatasets={datasets} />
     </div>
   );
 }

@@ -25,10 +25,10 @@ const dateTimeLabel = (timestamp?: string | null) =>
 
 export default async function Dashboard() {
   const user = await requireUser();
-  const rules = listRules(user.id);
-  const watchlist = listWatchlist(user.id);
-  const alerts = listAlertEvents(user.id, 5);
-  const workerStatus = getWorkerStatus();
+  const rules = await listRules(user.id);
+  const watchlist = await listWatchlist(user.id);
+  const alerts = await listAlertEvents(user.id, 5);
+  const workerStatus = await getWorkerStatus();
   const marketStatus = await marketData.getMarketStatus();
   const quotes = await Promise.all(
     watchlist.map(async (symbol) => {
@@ -59,7 +59,7 @@ export default async function Dashboard() {
       : marketStatus.warning ?? "Provider warning";
   const stats = [
     ["Active rules", String(rules.filter((rule) => rule.isActive).length), `${rules.length} saved locally`],
-    ["Alerts today", String(countAlertsToday(user.id)), `${alerts.length} recent events`],
+    ["Alerts today", String(await countAlertsToday(user.id)), `${alerts.length} recent events`],
     ["Notifications", "Mock", "SMS, email, Discord"],
     ["Market data", marketStatus.provider, marketStatusNote],
     [

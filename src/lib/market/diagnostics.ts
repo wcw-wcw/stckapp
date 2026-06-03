@@ -3,8 +3,10 @@ import {
   createProviderErrorLog,
   listProviderErrorLogs,
 } from "@/lib/db/repositories";
+import { getSafeConfigDiagnostics, type SafeConfigDiagnostics } from "@/lib/config/env";
+import { getDatabaseProviderDiagnostics } from "@/lib/db/provider";
 import { SUPPORTED_SYMBOLS, type SupportedSymbol } from "@/lib/rules/types";
-import { marketData, configuredMarketDataProvider } from "./provider";
+import { activeMarketDataProvider, marketData, marketDataProviderMode } from "./provider";
 import { isUsMarketHours } from "./status-helpers";
 
 export type SymbolProviderDiagnostic = {
@@ -14,16 +16,31 @@ export type SymbolProviderDiagnostic = {
   lagMinutes?: number;
   marketOpen: boolean;
   message?: string;
+  recentError?: {
+    context: string;
+    message: string;
+    createdAt: string;
+  };
 };
 
 export type ProviderDiagnostics = {
   provider: string;
+  configuredProvider: string;
+  activeProvider: string;
+  feed: string;
+  fallbackReason: string | null;
+  providerNote: string;
   checkedAt: string;
   marketOpen: boolean;
   symbols: SymbolProviderDiagnostic[];
   recentErrorCount: number;
-  recentErrors: ReturnType<typeof listProviderErrorLogs>;
+  recentErrors: Awaited<ReturnType<typeof listProviderErrorLogs>>;
+  config: SafeConfigDiagnostics;
+  database: ReturnType<typeof getDatabaseProviderDiagnostics>;
 };
+
+const alpacaIexNote =
+  "Alpaca Basic uses IEX data, not consolidated SIP data. Bars can differ from broker, Google, or full-market charts, and stale intraday bars are expected outside regular market hours.";
 
 function classifySymbol(symbol: SupportedSymbol, timestamp: string, now: Date): SymbolProviderDiagnostic {
   const marketOpen = isUsMarketHours(now.toISOString());
@@ -51,15 +68,27 @@ function classifySymbol(symbol: SupportedSymbol, timestamp: string, now: Date): 
 export async function getProviderDiagnostics(): Promise<ProviderDiagnostics> {
   const now = new Date();
   const since = new Date(now.getTime() - 24 * 60 * 60_000).toISOString();
+  const recentErrors = await listProviderErrorLogs(25);
   const symbols = await Promise.all(
     SUPPORTED_SYMBOLS.map(async (symbol) => {
       try {
         const candle = await marketData.getLatestCandle(symbol);
-        return classifySymbol(symbol, candle.timestamp, now);
+        const diagnostic = classifySymbol(symbol, candle.timestamp, now);
+        const recentError = recentErrors.find((error) => error.symbol === symbol);
+        return recentError
+          ? {
+              ...diagnostic,
+              recentError: {
+                context: recentError.context,
+                message: recentError.message,
+                createdAt: recentError.createdAt,
+              },
+            }
+          : diagnostic;
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown provider error.";
-        createProviderErrorLog({
-          provider: configuredMarketDataProvider,
+        await createProviderErrorLog({
+          provider: activeMarketDataProvider,
           symbol,
           context: "provider-diagnostics",
           message,
@@ -75,11 +104,19 @@ export async function getProviderDiagnostics(): Promise<ProviderDiagnostics> {
   );
 
   return {
-    provider: configuredMarketDataProvider,
+    provider: marketDataProviderMode.activeProvider,
+    configuredProvider: marketDataProviderMode.configuredProvider,
+    activeProvider: marketDataProviderMode.activeProvider,
+    feed: marketDataProviderMode.feed,
+    fallbackReason: marketDataProviderMode.fallbackReason,
+    providerNote:
+      marketDataProviderMode.configuredProvider === "alpaca" ? alpacaIexNote : "Mock mode uses local synthetic candles for development.",
     checkedAt: now.toISOString(),
     marketOpen: isUsMarketHours(now.toISOString()),
     symbols,
-    recentErrorCount: countProviderErrorsSince(since),
-    recentErrors: listProviderErrorLogs(25),
+    recentErrorCount: await countProviderErrorsSince(since),
+    recentErrors,
+    config: getSafeConfigDiagnostics(),
+    database: getDatabaseProviderDiagnostics(),
   };
 }

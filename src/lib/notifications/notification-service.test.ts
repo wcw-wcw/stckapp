@@ -35,8 +35,15 @@ describe("notification service", () => {
   it("reads the global notification cap from env with a safe default", () => {
     vi.stubEnv("GLOBAL_DAILY_NOTIFICATION_LIMIT", "12");
     expect(globalDailyNotificationLimit()).toBe(12);
-    vi.stubEnv("GLOBAL_DAILY_NOTIFICATION_LIMIT", "not-a-number");
+    vi.unstubAllEnvs();
     expect(globalDailyNotificationLimit()).toBe(100);
+  });
+
+  it("rejects invalid global notification caps", () => {
+    vi.stubEnv("GLOBAL_DAILY_NOTIFICATION_LIMIT", "not-a-number");
+    expect(() => globalDailyNotificationLimit()).toThrow(
+      "GLOBAL_DAILY_NOTIFICATION_LIMIT must be a non-negative integer.",
+    );
   });
 
   it("keeps Discord mocked when real notifications are disabled", async () => {

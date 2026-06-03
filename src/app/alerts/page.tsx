@@ -15,7 +15,7 @@ const moveLabel = (move?: number) =>
 
 export default async function AlertsPage() {
   const user = await requireUser();
-  const alerts = listAlertEvents(user.id);
+  const alerts = await listAlertEvents(user.id);
   return (
     <div className="page">
       <div className="page-header">

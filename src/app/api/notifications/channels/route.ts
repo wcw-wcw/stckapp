@@ -32,7 +32,7 @@ function validateDestination(type: NotificationChannelType, destination: string)
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  return NextResponse.json({ channels: listNotificationChannels(user.id) });
+  return NextResponse.json({ channels: await listNotificationChannels(user.id) });
 }
 
 export async function POST(request: Request) {
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "That destination does not match the selected channel type." }, { status: 400 });
   }
 
-  const channel = createNotificationChannel(user.id, {
+  const channel = await createNotificationChannel(user.id, {
     type: result.data.type,
     destination: result.data.destination,
     label: result.data.label,

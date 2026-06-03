@@ -20,7 +20,7 @@ export async function POST(
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-  const channel = getNotificationChannelById(user.id, (await params).id);
+  const channel = await getNotificationChannelById(user.id, (await params).id);
   if (!channel) return NextResponse.json({ error: "Channel not found." }, { status: 404 });
   if (!channel.isEnabled || !channel.isVerified) {
     return NextResponse.json({ error: "Enable and verify this channel before testing it." }, { status: 400 });
@@ -28,7 +28,7 @@ export async function POST(
   if (channel.sentToday >= channel.dailyLimit) {
     return NextResponse.json({ error: "This channel has reached its daily limit." }, { status: 429 });
   }
-  if (countNotificationAttemptsToday() >= globalDailyNotificationLimit()) {
+  if ((await countNotificationAttemptsToday()) >= globalDailyNotificationLimit()) {
     return NextResponse.json({ error: "The global daily notification limit has been reached." }, { status: 429 });
   }
 
@@ -38,7 +38,7 @@ export async function POST(
     body: "Discord delivery is connected for local alert testing. Not financial advice.",
   };
   const result = await notifications.send(message);
-  createNotificationLog({
+  await createNotificationLog({
     userId: user.id,
     channelId: channel.id,
     provider: result.provider,
@@ -48,7 +48,7 @@ export async function POST(
     message: message.body,
     error: result.error,
   });
-  if (result.status === "sent") incrementNotificationChannelCount(channel.id);
+  if (result.status === "sent") await incrementNotificationChannelCount(channel.id);
 
   return NextResponse.json({
     result,

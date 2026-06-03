@@ -5,6 +5,7 @@ import { RuleManager } from "./rule-manager";
 
 export default async function RulesPage() {
   const user = await requireUser();
+  const rules = await listRules(user.id);
   return (
     <div className="page">
       <div className="page-header">
@@ -15,7 +16,7 @@ export default async function RulesPage() {
         </div>
         <Link className="button" href="/rules/new">Create rule</Link>
       </div>
-      <RuleManager initialRules={listRules(user.id)} />
+      <RuleManager initialRules={rules} />
     </div>
   );
 }

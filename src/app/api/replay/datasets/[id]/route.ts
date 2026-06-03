@@ -8,7 +8,7 @@ export async function DELETE(
 ) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  const deleted = deleteReplayDataset(user.id, (await params).id);
+  const deleted = await deleteReplayDataset(user.id, (await params).id);
   if (!deleted) return NextResponse.json({ error: "Dataset not found." }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

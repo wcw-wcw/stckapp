@@ -11,6 +11,7 @@ CREATE TYPE sms_delivery_status AS ENUM (
   'skipped_no_verified_channel',
   'skipped_user_limit',
   'skipped_global_limit',
+  'skipped_account_paused',
   'skipped_paused'
 );
 CREATE TYPE notification_channel_type AS ENUM ('sms', 'email', 'discord_webhook');
@@ -25,56 +26,21 @@ CREATE TABLE users (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE password_reset_tokens (
+CREATE TABLE sessions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  token_hash TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
   expires_at TIMESTAMPTZ NOT NULL,
-  used_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE TABLE phone_verifications (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  phone_number TEXT NOT NULL,
-  code_hash TEXT NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL,
-  attempts SMALLINT NOT NULL DEFAULT 0,
-  verified_at TIMESTAMPTZ,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+CREATE INDEX sessions_token_idx ON sessions (token_hash);
 
-CREATE TABLE user_sms_settings (
+CREATE TABLE user_notification_preferences (
   user_id UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-  phone_number TEXT,
-  is_verified BOOLEAN NOT NULL DEFAULT false,
-  sms_paused BOOLEAN NOT NULL DEFAULT false,
-  daily_sms_limit SMALLINT NOT NULL DEFAULT 10 CHECK (daily_sms_limit BETWEEN 0 AND 100),
-  sms_sent_today SMALLINT NOT NULL DEFAULT 0,
-  sms_count_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  notifications_paused BOOLEAN NOT NULL DEFAULT false,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
-
-CREATE TABLE notification_channels (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  type notification_channel_type NOT NULL,
-  destination TEXT NOT NULL,
-  label TEXT,
-  is_verified BOOLEAN NOT NULL DEFAULT false,
-  is_enabled BOOLEAN NOT NULL DEFAULT true,
-  daily_limit SMALLINT NOT NULL DEFAULT 10 CHECK (daily_limit BETWEEN 0 AND 100),
-  sent_today SMALLINT NOT NULL DEFAULT 0,
-  count_date DATE NOT NULL DEFAULT CURRENT_DATE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE (user_id, type, destination)
-);
-
-CREATE INDEX notification_channels_user_idx
-  ON notification_channels (user_id, type)
-  WHERE is_enabled = true;
 
 CREATE TABLE supported_symbols (
   symbol TEXT PRIMARY KEY,
@@ -91,7 +57,8 @@ INSERT INTO supported_symbols (symbol, name) VALUES
   ('NVDA', 'NVIDIA Corporation'),
   ('TSLA', 'Tesla, Inc.'),
   ('AMD', 'Advanced Micro Devices, Inc.'),
-  ('MSFT', 'Microsoft Corporation');
+  ('MSFT', 'Microsoft Corporation')
+ON CONFLICT (symbol) DO NOTHING;
 
 CREATE TABLE watchlist_symbols (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -139,9 +106,46 @@ CREATE TABLE alert_events (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX alert_events_user_triggered_idx ON alert_events (user_id, triggered_at DESC);
-CREATE INDEX alert_events_rule_triggered_idx ON alert_events (rule_id, triggered_at DESC);
-CREATE INDEX alert_events_rule_candle_idx ON alert_events (rule_id, triggered_at);
+CREATE INDEX alert_events_user_triggered_idx
+  ON alert_events (user_id, triggered_at DESC);
+CREATE INDEX alert_events_rule_triggered_idx
+  ON alert_events (rule_id, triggered_at DESC);
+CREATE INDEX alert_events_rule_candle_idx
+  ON alert_events (rule_id, triggered_at);
+
+CREATE TABLE phone_verifications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  phone_number TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  attempts SMALLINT NOT NULL DEFAULT 0,
+  verified_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX phone_verifications_user_created_idx
+  ON phone_verifications (user_id, created_at DESC);
+
+CREATE TABLE notification_channels (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type notification_channel_type NOT NULL,
+  destination TEXT NOT NULL,
+  label TEXT,
+  is_verified BOOLEAN NOT NULL DEFAULT false,
+  is_enabled BOOLEAN NOT NULL DEFAULT true,
+  daily_limit SMALLINT NOT NULL DEFAULT 10 CHECK (daily_limit BETWEEN 0 AND 100),
+  sent_today SMALLINT NOT NULL DEFAULT 0,
+  count_date DATE NOT NULL DEFAULT CURRENT_DATE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, type, destination)
+);
+
+CREATE INDEX notification_channels_user_idx
+  ON notification_channels (user_id, type)
+  WHERE is_enabled = true;
 
 CREATE TABLE notification_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -157,7 +161,8 @@ CREATE TABLE notification_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX notification_logs_created_idx ON notification_logs (created_at DESC);
+CREATE INDEX notification_logs_user_created_idx
+  ON notification_logs (user_id, created_at DESC);
 
 CREATE TABLE provider_error_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -169,8 +174,10 @@ CREATE TABLE provider_error_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX provider_error_logs_created_idx ON provider_error_logs (created_at DESC);
-CREATE INDEX provider_error_logs_symbol_created_idx ON provider_error_logs (symbol, created_at DESC);
+CREATE INDEX provider_error_logs_created_idx
+  ON provider_error_logs (created_at DESC);
+CREATE INDEX provider_error_logs_symbol_created_idx
+  ON provider_error_logs (symbol, created_at DESC);
 
 CREATE TABLE backtest_results (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -181,14 +188,32 @@ CREATE TABLE backtest_results (
   range_start TIMESTAMPTZ NOT NULL,
   range_end TIMESTAMPTZ NOT NULL,
   result_json JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, rule_id, range_label)
+);
+
+CREATE INDEX backtest_results_user_created_idx
+  ON backtest_results (user_id, created_at DESC);
+
+CREATE TABLE replay_datasets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  symbol TEXT NOT NULL REFERENCES supported_symbols(symbol),
+  source TEXT NOT NULL DEFAULT 'manual_json',
+  candles_json JSONB NOT NULL,
+  candle_count INTEGER NOT NULL,
+  starts_at TIMESTAMPTZ NOT NULL,
+  ends_at TIMESTAMPTZ NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX backtest_results_user_created_idx ON backtest_results (user_id, created_at DESC);
+CREATE INDEX replay_datasets_user_created_idx
+  ON replay_datasets (user_id, created_at DESC);
 
 CREATE TABLE market_worker_status (
   id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
-  status TEXT NOT NULL DEFAULT 'starting',
+  status TEXT NOT NULL DEFAULT 'idle',
   mode worker_mode NOT NULL DEFAULT 'mock',
   last_update_at TIMESTAMPTZ,
   last_tick_at TIMESTAMPTZ,
@@ -205,7 +230,8 @@ CREATE TABLE market_worker_status (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-INSERT INTO market_worker_status (id) VALUES (1);
+INSERT INTO market_worker_status (id) VALUES (1)
+ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE suggested_rule_candidates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

@@ -1,4 +1,4 @@
-import { configuredMarketDataProvider } from "@/lib/market/provider";
+import { activeMarketDataProvider } from "@/lib/market/provider";
 import {
   getWorkerStatus,
   setWorkerLoopRunning,
@@ -22,7 +22,7 @@ declare global {
 }
 
 const defaultIntervalMs = Number(process.env.LOCAL_WORKER_INTERVAL_MS ?? 60_000);
-const workerMode = configuredMarketDataProvider === "alpaca" ? "live" : "mock";
+const workerMode = activeMarketDataProvider === "alpaca" ? "live" : "mock";
 
 function runtime() {
   global.signalDeskWorkerRuntime ??= {
@@ -57,7 +57,7 @@ export async function startLocalWorkerLoop(intervalMs?: number) {
 
   if (!state.timer) {
     state.startedAt = new Date().toISOString();
-    setWorkerLoopRunning(true, workerMode, "running");
+    await setWorkerLoopRunning(true, workerMode, "running");
     void runLoopTick();
     state.timer = setInterval(() => {
       void runLoopTick();
@@ -67,26 +67,26 @@ export async function startLocalWorkerLoop(intervalMs?: number) {
   return getLocalWorkerStatus();
 }
 
-export function stopLocalWorkerLoop() {
+export async function stopLocalWorkerLoop() {
   const state = runtime();
   if (state.timer) {
     clearInterval(state.timer);
     state.timer = undefined;
   }
   state.startedAt = undefined;
-  setWorkerLoopRunning(false, workerMode, "idle");
+  await setWorkerLoopRunning(false, workerMode, "idle");
   return getLocalWorkerStatus();
 }
 
-export function getLocalWorkerStatus(): WorkerStatus & {
+export async function getLocalWorkerStatus(): Promise<WorkerStatus & {
   isRunning: boolean;
   startedAt?: string;
   intervalMs: number;
   providerBackoff: ReturnType<typeof getLiveWorkerBackoffStatus>;
-} {
+}> {
   const state = runtime();
   return {
-    ...getWorkerStatus(),
+    ...(await getWorkerStatus()),
     isRunning: isRunning(),
     startedAt: state.startedAt,
     intervalMs: state.intervalMs,

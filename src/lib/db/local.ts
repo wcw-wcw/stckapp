@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { assertSqliteRepositoryProvider } from "./provider";
 
 const databasePath = join(process.cwd(), "data", "signaldesk.sqlite");
 const schemaPath = join(process.cwd(), "db", "local-schema.sql");
@@ -41,6 +42,11 @@ function ensureLocalSchemaUpgrades(database: DatabaseSync) {
     "CREATE INDEX IF NOT EXISTS alert_events_rule_candle_idx ON alert_events (rule_id, triggered_at);",
   );
   database.exec(`
+    CREATE TABLE IF NOT EXISTS user_notification_preferences (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      notifications_paused INTEGER NOT NULL DEFAULT 0 CHECK (notifications_paused IN (0, 1)),
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS provider_error_logs (
       id TEXT PRIMARY KEY,
       provider TEXT NOT NULL,
@@ -58,6 +64,7 @@ function ensureLocalSchemaUpgrades(database: DatabaseSync) {
 }
 
 export function getDatabase() {
+  assertSqliteRepositoryProvider();
   if (!existsSync(schemaPath)) {
     throw new Error("Local database schema is missing.");
   }

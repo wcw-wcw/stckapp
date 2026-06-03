@@ -25,7 +25,8 @@ export default async function SymbolPage({
   const user = await requireUser();
   const symbol = (await params).symbol.toUpperCase() as SupportedSymbol;
   if (!SUPPORTED_SYMBOLS.includes(symbol)) notFound();
-  if (!listWatchlist(user.id).includes(symbol)) notFound();
+  const watchlist = await listWatchlist(user.id);
+  if (!watchlist.includes(symbol)) notFound();
 
   let candles: Candle[];
   try {
@@ -69,7 +70,8 @@ export default async function SymbolPage({
   const earliest = candles.at(0) as Candle;
   const latestState = states.at(-1);
   const change = ((latest.close - earliest.open) / earliest.open) * 100;
-  const activeRules = listRules(user.id).filter((rule) => rule.symbol === symbol);
+  const rules = await listRules(user.id);
+  const activeRules = rules.filter((rule) => rule.symbol === symbol);
 
   return (
     <div className="page">

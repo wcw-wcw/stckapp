@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Enter the 6-digit verification code." }, { status: 400 });
   }
 
-  const verification = verifyPhoneCode(user.id, result.data.phoneNumber, result.data.code);
+  const verification = await verifyPhoneCode(user.id, result.data.phoneNumber, result.data.code);
   if (!verification.ok) {
     return NextResponse.json({ error: verification.error }, { status: 400 });
   }

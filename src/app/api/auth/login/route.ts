@@ -3,14 +3,12 @@ import { z } from "zod";
 import { verifyPassword } from "@/lib/auth/password";
 import { allowAttempt } from "@/lib/auth/rate-limit";
 import { createSession } from "@/lib/auth/session";
-import { getDatabase } from "@/lib/db/local";
+import { findUserByEmail } from "@/lib/db/repositories";
 
 const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email(),
   password: z.string().min(1).max(128),
 });
-
-type UserRow = { id: string; email: string; password_hash: string; role: "user" | "admin" };
 
 export async function POST(request: Request) {
   const ip = request.headers.get("x-forwarded-for") ?? "local";
@@ -23,9 +21,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Enter a valid email and password." }, { status: 400 });
   }
 
-  const user = getDatabase()
-    .prepare("SELECT id, email, password_hash, role FROM users WHERE email = ?")
-    .get(result.data.email) as UserRow | undefined;
+  const user = await findUserByEmail(result.data.email);
   if (!user || !(await verifyPassword(result.data.password, user.password_hash))) {
     return NextResponse.json({ error: "Email or password is incorrect." }, { status: 401 });
   }

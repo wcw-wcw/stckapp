@@ -15,7 +15,7 @@ export async function PATCH(
   if (!result.success) {
     return NextResponse.json({ error: "Choose whether the rule is active." }, { status: 400 });
   }
-  const updated = setRuleActive(user.id, (await params).id, result.data.isActive);
+  const updated = await setRuleActive(user.id, (await params).id, result.data.isActive);
   if (!updated) return NextResponse.json({ error: "Rule not found." }, { status: 404 });
   return NextResponse.json({ ok: true });
 }
@@ -26,7 +26,7 @@ export async function DELETE(
 ) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  const deleted = deleteRule(user.id, (await params).id);
+  const deleted = await deleteRule(user.id, (await params).id);
   if (!deleted) return NextResponse.json({ error: "Rule not found." }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

@@ -1,12 +1,17 @@
 import { requireUser } from "@/lib/auth/require-user";
-import { listNotificationChannels, listNotificationLogs } from "@/lib/db/repositories";
+import {
+  getUserNotificationPreferences,
+  listNotificationChannels,
+  listNotificationLogs,
+} from "@/lib/db/repositories";
 import { realNotificationsEnabled } from "@/lib/notifications/notification-service";
 import { NotificationSettings } from "./notification-settings";
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const channels = listNotificationChannels(user.id);
-  const logs = listNotificationLogs(user.id);
+  const channels = await listNotificationChannels(user.id);
+  const logs = await listNotificationLogs(user.id);
+  const preferences = await getUserNotificationPreferences(user.id);
   const realDelivery = realNotificationsEnabled();
   return (
     <div className="page">
@@ -36,6 +41,7 @@ export default async function SettingsPage() {
       <NotificationSettings
         initialChannels={channels}
         initialLogs={logs}
+        initialPreferences={preferences}
         userEmail={user.email}
         realNotificationsEnabled={realDelivery}
       />

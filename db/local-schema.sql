@@ -17,6 +17,12 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS sessions_token_idx ON sessions (token_hash);
 
+CREATE TABLE IF NOT EXISTS user_notification_preferences (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  notifications_paused INTEGER NOT NULL DEFAULT 0 CHECK (notifications_paused IN (0, 1)),
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS supported_symbols (
   symbol TEXT PRIMARY KEY,
   name TEXT NOT NULL,

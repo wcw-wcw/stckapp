@@ -22,7 +22,7 @@ export async function PATCH(
   if (!result.success) {
     return NextResponse.json({ error: "Enter valid channel settings." }, { status: 400 });
   }
-  const channel = updateNotificationChannel(user.id, (await params).id, result.data);
+  const channel = await updateNotificationChannel(user.id, (await params).id, result.data);
   if (!channel) return NextResponse.json({ error: "Channel not found." }, { status: 404 });
   return NextResponse.json({ channel });
 }
@@ -33,7 +33,7 @@ export async function DELETE(
 ) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-  const deleted = deleteNotificationChannel(user.id, (await params).id);
+  const deleted = await deleteNotificationChannel(user.id, (await params).id);
   if (!deleted) return NextResponse.json({ error: "Channel not found." }, { status: 404 });
   return NextResponse.json({ ok: true });
 }

@@ -4,6 +4,7 @@ import {
   listNotificationLogs,
 } from "@/lib/db/repositories";
 import { getProviderDiagnostics } from "@/lib/market/diagnostics";
+import { MaintenanceCleanupCard } from "./maintenance-cleanup-card";
 
 const timeLabel = (timestamp?: string | null) =>
   timestamp
@@ -19,8 +20,8 @@ const timeLabel = (timestamp?: string | null) =>
 export default async function DiagnosticsPage() {
   const user = await requireUser();
   const diagnostics = await getProviderDiagnostics();
-  const worker = getWorkerStatus();
-  const notificationLogs = listNotificationLogs(user.id, 10);
+  const worker = await getWorkerStatus();
+  const notificationLogs = await listNotificationLogs(user.id, 10);
 
   return (
     <div className="page">
@@ -29,7 +30,7 @@ export default async function DiagnosticsPage() {
           <p className="eyebrow">Local diagnostics</p>
           <h1>Provider health.</h1>
           <p className="subhead">
-            Inspect Alpaca/mock provider status, local worker state, recent provider errors, and delivery outcomes before deployment pressure enters the room.
+            Inspect active provider status, local worker state, recent provider errors, delivery outcomes, and manual maintenance before deployment pressure enters the room.
           </p>
         </div>
       </div>
@@ -37,8 +38,11 @@ export default async function DiagnosticsPage() {
       <section className="grid stats-grid" aria-label="Diagnostics summary">
         <div className="card">
           <div className="stat-label">Provider</div>
-          <div className="stat-value">{diagnostics.provider}</div>
-          <div className="small">{diagnostics.marketOpen ? "Market hours" : "Outside regular hours"}</div>
+          <div className="stat-value">{diagnostics.activeProvider}</div>
+          <div className="small">
+            Configured {diagnostics.configuredProvider}
+            {diagnostics.feed ? ` · feed ${diagnostics.feed}` : ""}
+          </div>
         </div>
         <div className="card">
           <div className="stat-label">Symbols checked</div>
@@ -57,11 +61,70 @@ export default async function DiagnosticsPage() {
         </div>
       </section>
 
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <div className="card-header">
+          <h2>Provider mode</h2>
+          <span className={diagnostics.fallbackReason ? "pill pill-warning" : "pill"}>
+            {diagnostics.fallbackReason ? "fallback" : "configured"}
+          </span>
+        </div>
+        <p className="small">
+          Active provider: {diagnostics.activeProvider}. Requested provider: {diagnostics.configuredProvider}.
+        </p>
+        <p className="notice" style={{ marginTop: "0.8rem" }}>
+          {diagnostics.fallbackReason ?? diagnostics.providerNote}
+        </p>
+        {diagnostics.fallbackReason && (
+          <p className="small" style={{ marginTop: "0.8rem" }}>{diagnostics.providerNote}</p>
+        )}
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <div className="card-header">
+          <h2>Database and config</h2>
+          <span className={diagnostics.database.configValid ? "pill" : "pill pill-warning"}>
+            {diagnostics.database.configValid ? "valid" : "invalid"}
+          </span>
+        </div>
+        <div className="results">
+          <div className="result">
+            <span className="small">Configured DB</span>
+            <strong>{diagnostics.database.configuredProvider}</strong>
+          </div>
+          <div className="result">
+            <span className="small">Active DB</span>
+            <strong>{diagnostics.database.activeProvider}</strong>
+          </div>
+          <div className="result">
+            <span className="small">Local SQLite</span>
+            <strong>{diagnostics.database.usingLocalSqlite ? "Yes" : "No"}</strong>
+          </div>
+          <div className="result">
+            <span className="small">Postgres config</span>
+            <strong>{diagnostics.database.postgresConfigComplete ? "Complete" : "Incomplete"}</strong>
+          </div>
+          <div className="result">
+            <span className="small">DATABASE_URL</span>
+            <strong>{diagnostics.database.databaseUrlPresent ? "Present" : "Not set"}</strong>
+          </div>
+          <div className="result">
+            <span className="small">Real Discord</span>
+            <strong>{diagnostics.config.discordRealNotificationSafety === "real-enabled" ? "Enabled" : "Mocked"}</strong>
+          </div>
+        </div>
+        <p className="notice" style={{ marginTop: "0.8rem" }}>{diagnostics.database.note}</p>
+        {diagnostics.database.configErrors.length > 0 && (
+          <p className="small" style={{ marginTop: "0.8rem" }}>
+            {diagnostics.database.configErrors.join(" ")}
+          </p>
+        )}
+      </section>
+
       <section className="grid split-grid" style={{ marginTop: "1rem" }}>
         <div className="card">
           <div className="card-header">
             <h2>Per-symbol provider status</h2>
-            <span className="small">{diagnostics.provider}</span>
+            <span className="small">{diagnostics.activeProvider}</span>
           </div>
           <table>
             <thead>
@@ -73,7 +136,14 @@ export default async function DiagnosticsPage() {
                   <td className="symbol">{item.symbol}</td>
                   <td><span className={`pill ${item.health === "ok" ? "" : "pill-warning"}`}>{item.health}</span></td>
                   <td>{timeLabel(item.latestBarAt)}</td>
-                  <td>{item.lagMinutes === undefined ? item.message ?? "n/a" : `${item.lagMinutes}m`}</td>
+                  <td>
+                    {item.lagMinutes === undefined ? item.message ?? "n/a" : `${item.lagMinutes}m`}
+                    {item.recentError && (
+                      <div className="small">
+                        Recent {item.recentError.context}: {item.recentError.message}
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -145,6 +215,8 @@ export default async function DiagnosticsPage() {
           </tbody>
         </table>
       </section>
+
+      <MaintenanceCleanupCard />
     </div>
   );
 }

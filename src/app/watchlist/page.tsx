@@ -4,6 +4,7 @@ import { WatchlistEditor } from "./watchlist-editor";
 
 export default async function WatchlistPage() {
   const user = await requireUser();
+  const symbols = await listWatchlist(user.id);
   return (
     <div className="page">
       <div className="page-header">
@@ -13,7 +14,7 @@ export default async function WatchlistPage() {
           <p className="subhead">The MVP supports eight liquid symbols. A fixed list keeps live-data usage predictable.</p>
         </div>
       </div>
-      <WatchlistEditor initialSymbols={listWatchlist(user.id)} />
+      <WatchlistEditor initialSymbols={symbols} />
     </div>
   );
 }

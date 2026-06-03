@@ -19,7 +19,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: result.error.issues[0]?.message ?? "Enter a valid phone number." }, { status: 400 });
   }
 
-  const verification = startPhoneVerification(user.id, result.data.phoneNumber);
+  const verification = await startPhoneVerification(user.id, result.data.phoneNumber);
   return NextResponse.json({
     expiresAt: verification.expiresAt,
     mockCode: verification.code,

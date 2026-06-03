@@ -1,0 +1,13 @@
+node_modules
+.next
+coverage
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+data/*.sqlite
+data/*.sqlite-shm
+data/*.sqlite-wal
+README.md
+ROADMAP.md

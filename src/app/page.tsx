@@ -71,7 +71,7 @@ export default async function Dashboard() {
     ],
   ];
   const workerDetails = [
-    ["Last candle", dateTimeLabel(workerStatus.last_candle_at)],
+    ["Last evaluated candle", dateTimeLabel(workerStatus.last_candle_at)],
     ["Symbols", String(workerStatus.symbols_evaluated)],
     ["Rules", String(workerStatus.rules_evaluated)],
     ["Triggers", String(workerStatus.triggers_created)],

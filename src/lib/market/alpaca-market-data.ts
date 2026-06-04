@@ -101,22 +101,24 @@ export class AlpacaMarketDataService implements MarketDataService {
   }
 
   async getHistoricalCandles(symbol: SupportedSymbol, count: number) {
-    const end = await this.getLatestCandle(symbol);
-    const start = new Date(new Date(end.timestamp).getTime() - Math.max(count * 6 * 60_000, 2 * 60 * 60_000));
+    const end = new Date();
+    const start = new Date(end.getTime() - Math.max(count * 6 * 60_000, 2 * 60 * 60_000));
     const candles = (await this.fetchHistoricalBars({
       symbol,
       timeframe: "1Min",
       start,
-      end: new Date(end.timestamp),
+      end,
       limit: count,
+      sort: "desc",
       context: "historical-candles",
-    })).map(toCandle).slice(-count);
+    })).reverse().map(toCandle).slice(-count);
     if (candles.length) return candles;
 
+    const latest = await this.getLatestCandle(symbol);
     // Alpaca Basic can return empty historical windows around the latest
     // 15-minute limitation. Keep charts usable while making the latest real bar
     // the anchor point instead of crashing the UI.
-    return syntheticWindowFromLatest(end, Math.min(count, 120));
+    return syntheticWindowFromLatest(latest, Math.min(count, 120));
   }
 
   private async fetchHistoricalBars(input: {
@@ -125,6 +127,7 @@ export class AlpacaMarketDataService implements MarketDataService {
     start: Date;
     end: Date;
     limit?: number;
+    sort?: "asc" | "desc";
     context: string;
   }) {
     const bars: AlpacaBar[] = [];
@@ -142,7 +145,7 @@ export class AlpacaMarketDataService implements MarketDataService {
           end: input.end.toISOString(),
           limit: String(requestLimit),
           feed: this.feed,
-          sort: "asc",
+          sort: input.sort ?? "asc",
           page_token: pageToken,
         },
         input.context,

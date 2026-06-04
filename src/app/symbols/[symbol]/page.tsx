@@ -8,16 +8,6 @@ import { SUPPORTED_SYMBOLS, type Candle, type SupportedSymbol } from "@/lib/rule
 import { SymbolChart } from "./symbol-chart";
 import { SymbolLevelsPanel } from "./symbol-levels-panel";
 
-const barTimeLabel = (timestamp: string) =>
-  new Date(timestamp).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/New_York",
-    timeZoneName: "short",
-  });
-
 export default async function SymbolPage({
   params,
 }: {
@@ -90,7 +80,6 @@ export default async function SymbolPage({
       <section className="card chart-card">
         <div className="card-header">
           <h2>Price chart</h2>
-          <span className="small">Latest bar: {barTimeLabel(latest.timestamp)}</span>
         </div>
         <SymbolChart symbol={symbol} />
       </section>

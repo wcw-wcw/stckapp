@@ -210,7 +210,7 @@ export default async function DiagnosticsPage() {
         <aside className="card">
           <div className="card-header"><h2>Worker counters</h2></div>
           <div className="results">
-            <div className="result"><span className="small">Last candle</span><strong>{timeLabel(worker.last_candle_at)}</strong></div>
+            <div className="result"><span className="small">Last evaluated candle</span><strong>{timeLabel(worker.last_candle_at)}</strong></div>
             <div className="result"><span className="small">Symbols</span><strong>{worker.symbols_evaluated}</strong></div>
             <div className="result"><span className="small">Rules</span><strong>{worker.rules_evaluated}</strong></div>
             <div className="result"><span className="small">Triggers</span><strong>{worker.triggers_created}</strong></div>

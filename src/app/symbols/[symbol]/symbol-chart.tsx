@@ -256,6 +256,9 @@ export function SymbolChart({ symbol }: { symbol: SupportedSymbol }) {
 
   return (
     <div className="symbol-chart">
+      <div className="chart-current-bar" aria-live="polite">
+        <span className="small">Latest bar: {formatDateTime(data?.meta.lastBarTime ?? null)}</span>
+      </div>
       <div className="chart-toolbar" aria-label={`${symbol} chart controls`}>
         <div className="chart-control-group" role="group" aria-label="Range">
           {ranges.map((option) => (

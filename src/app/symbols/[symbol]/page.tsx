@@ -5,7 +5,7 @@ import { buildIndicatorStates } from "@/lib/market/indicators";
 import { listRules, listWatchlist } from "@/lib/db/repositories";
 import { previewRule } from "@/lib/rules/preview";
 import { SUPPORTED_SYMBOLS, type Candle, type SupportedSymbol } from "@/lib/rules/types";
-import { PriceChart } from "./price-chart";
+import { SymbolChart } from "./symbol-chart";
 
 const barTimeLabel = (timestamp: string) =>
   new Date(timestamp).toLocaleString("en-US", {
@@ -79,7 +79,7 @@ export default async function SymbolPage({
         <div>
           <p className="eyebrow">Monitored symbol</p>
           <h1>{symbol}</h1>
-          <p className="subhead">Chart-ready detail view with provider-backed 1-minute candles. Mock mode stays the default until live credentials are configured.</p>
+          <p className="subhead">Provider-backed candlesticks with range and interval controls. Mock mode stays the default until live credentials are configured.</p>
         </div>
         <div className="symbol-quote">
           <strong>${latest.close.toFixed(2)}</strong>
@@ -91,12 +91,7 @@ export default async function SymbolPage({
           <h2>Price chart</h2>
           <span className="small">Latest bar: {barTimeLabel(latest.timestamp)}</span>
         </div>
-        <PriceChart candles={candles} symbol={symbol} />
-        {candles.some((candle) => candle.volume === 0) && (
-          <p className="notice" style={{ marginTop: "1rem" }}>
-            Alpaca returned a latest IEX bar but no historical bars for this window, so the chart is anchored to the latest real bar with a synthetic local lead-in.
-          </p>
-        )}
+        <SymbolChart symbol={symbol} />
       </section>
       <section className="card" style={{ marginTop: "1rem" }}>
         <div className="card-header"><h2>Rules monitoring {symbol}</h2><span className="small">{activeRules.length} total</span></div>

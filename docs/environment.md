@@ -52,6 +52,28 @@ npm run worker
 
 Vercel Hobby cron is not appropriate for one-minute monitoring.
 
+Hosted worker deployment can still be deferred during web-app testing. To exercise the deployed Vercel app against Neon first, run the standalone worker locally with the same Neon/Postgres environment:
+
+```sh
+npm run worker
+```
+
+## Market Charts
+
+Symbol detail charts use normalized bars from:
+
+```sh
+GET /api/market/bars/:symbol?range=1D&interval=1m
+```
+
+Supported ranges are `1D`, `5D`, and `1M`. Supported intervals are `1m`, `5m`, `15m`, and `1h`. Supported symbols remain fixed to the app's allowlist; arbitrary ticker lookup is not enabled.
+
+When `MARKET_DATA_PROVIDER=mock`, charts use generated local bars. When `MARKET_DATA_PROVIDER=alpaca`, charts request Alpaca historical bars with the configured `ALPACA_DATA_FEED` value. The default `iex` feed is Alpaca Basic/IEX data, not consolidated SIP data, so chart bars can differ from broker, Google, or full-market charts.
+
+Intraday bars can look stale outside regular market hours because the latest provider bar may be from the prior session close. The chart API returns sanitized metadata and a warning when bars are empty, stale, degraded, or IEX/basic-limited.
+
+SignalDesk does not store raw historical chart candles in the database. Charts are fetched or generated on demand. SignalDesk also does not execute trades and has no brokerage execution integration.
+
 ## Notifications
 
 SMS and email are mocked. Real Discord delivery remains disabled unless:

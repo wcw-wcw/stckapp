@@ -158,6 +158,9 @@ describe("worker grouping", () => {
         async getLatestCandle() {
           throw new Error("unused");
         },
+        async getChartBars() {
+          throw new Error("unused");
+        },
         async getMarketStatus() {
           throw new Error("unused");
         },

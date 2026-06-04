@@ -42,6 +42,12 @@ Local SQLite can be used by the Next.js app and standalone worker together for d
 
 Vercel Hobby cron is not appropriate for one-minute monitoring. The production shape should be a Next.js app on Vercel or similar, a shared Postgres/Neon database, and a separate always-on worker process.
 
+Hosted worker setup can remain deferred while validating the deployed web app. For that stage, point your local environment at the same Neon/Postgres database as Vercel and run:
+
+```sh
+npm run worker
+```
+
 ## Postgres / Neon Configuration
 
 Postgres deployment prep is gated by:
@@ -75,6 +81,14 @@ ENABLE_REAL_NOTIFICATIONS=true
 ```
 
 Leave it `false` for local development unless you are intentionally testing a real Discord webhook. SMS and email delivery remain mocked.
+
+## Market Data And Charts
+
+Mock market data remains the default. Symbol detail pages fetch chart bars from `GET /api/market/bars/:symbol` with `range=1D|5D|1M` and `interval=1m|5m|15m|1h`. The endpoint validates symbols against the fixed supported-symbol list and returns normalized `time`, `open`, `high`, `low`, `close`, and `volume` bars plus sanitized provider metadata.
+
+With `MARKET_DATA_PROVIDER=alpaca`, the chart endpoint requests Alpaca historical bars for the selected range and interval. With the default `ALPACA_DATA_FEED=iex`, Alpaca Basic/IEX data is not consolidated SIP data, so bars can differ from broker or full-market charts. Outside regular market hours, the latest intraday bar may be from the prior session close; the response metadata includes stale or degraded warnings instead of hiding that state.
+
+Raw historical chart candles are not stored in SQLite or Postgres in this pass. The app still has no trade execution, arbitrary ticker support, saved chart levels, or quick alerts.
 
 ## Safe Checks
 

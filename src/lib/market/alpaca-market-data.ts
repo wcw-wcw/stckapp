@@ -1,7 +1,8 @@
 import type { Candle, SupportedSymbol } from "@/lib/rules/types";
 import { createProviderErrorLog } from "@/lib/db/repositories";
+import { alpacaTimeframeByInterval, candleToChartBar, getChartRangeStart } from "./chart-bars";
 import { buildMarketStatus } from "./status-helpers";
-import type { MarketDataService } from "./types";
+import type { ChartBarsRequest, MarketDataService } from "./types";
 
 type AlpacaBar = {
   t: string;
@@ -100,38 +101,73 @@ export class AlpacaMarketDataService implements MarketDataService {
   }
 
   async getHistoricalCandles(symbol: SupportedSymbol, count: number) {
-    const latest = await this.getLatestCandle(symbol);
-    const end = new Date(latest.timestamp);
-    const start = new Date(end.getTime() - Math.max(count * 6 * 60_000, 2 * 60 * 60_000));
-    const bars: AlpacaBar[] = [];
-    let pageToken: string | undefined;
-
-    do {
-      const payload = await this.request<AlpacaBarsResponse>(
-        "/stocks/bars",
-        {
-          symbols: symbol,
-          timeframe: "1Min",
-          start: start.toISOString(),
-          end: end.toISOString(),
-          limit: String(Math.min(maxBarsPerRequest, Math.max(count - bars.length, 1))),
-          feed: this.feed,
-          sort: "asc",
-          page_token: pageToken,
-        },
-        "historical-candles",
-      );
-      bars.push(...(payload.bars?.[symbol] ?? []));
-      pageToken = payload.next_page_token;
-    } while (pageToken && bars.length < count);
-
-    const candles = bars.map(toCandle).slice(-count);
+    const end = await this.getLatestCandle(symbol);
+    const start = new Date(new Date(end.timestamp).getTime() - Math.max(count * 6 * 60_000, 2 * 60 * 60_000));
+    const candles = (await this.fetchHistoricalBars({
+      symbol,
+      timeframe: "1Min",
+      start,
+      end: new Date(end.timestamp),
+      limit: count,
+      context: "historical-candles",
+    })).map(toCandle).slice(-count);
     if (candles.length) return candles;
 
     // Alpaca Basic can return empty historical windows around the latest
     // 15-minute limitation. Keep charts usable while making the latest real bar
     // the anchor point instead of crashing the UI.
-    return syntheticWindowFromLatest(latest, Math.min(count, 120));
+    return syntheticWindowFromLatest(end, Math.min(count, 120));
+  }
+
+  private async fetchHistoricalBars(input: {
+    symbol: SupportedSymbol;
+    timeframe: string;
+    start: Date;
+    end: Date;
+    limit?: number;
+    context: string;
+  }) {
+    const bars: AlpacaBar[] = [];
+    let pageToken: string | undefined;
+    const maxBars = input.limit ?? maxBarsPerRequest;
+
+    do {
+      const requestLimit = Math.min(maxBarsPerRequest, Math.max(maxBars - bars.length, 1));
+      const payload = await this.request<AlpacaBarsResponse>(
+        "/stocks/bars",
+        {
+          symbols: input.symbol,
+          timeframe: input.timeframe,
+          start: input.start.toISOString(),
+          end: input.end.toISOString(),
+          limit: String(requestLimit),
+          feed: this.feed,
+          sort: "asc",
+          page_token: pageToken,
+        },
+        input.context,
+      );
+      bars.push(...(payload.bars?.[input.symbol] ?? []));
+      pageToken = payload.next_page_token;
+    } while (pageToken && bars.length < maxBars);
+
+    return bars;
+  }
+
+  async getChartBars(symbol: SupportedSymbol, request: ChartBarsRequest) {
+    const end = new Date();
+    const bars = await this.fetchHistoricalBars({
+      symbol,
+      timeframe: alpacaTimeframeByInterval[request.interval],
+      start: getChartRangeStart(request.range, end),
+      end,
+      context: "chart-bars",
+    });
+
+    return {
+      bars: bars.map(toCandle).map(candleToChartBar),
+      warning: "Alpaca Basic/IEX data is not consolidated SIP data and may differ from full-market charts.",
+    };
   }
 
   async getLatestCandle(symbol: SupportedSymbol) {

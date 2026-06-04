@@ -15,6 +15,7 @@ function bar(index: number) {
 describe("AlpacaMarketDataService", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   it("pages historical candle requests above Alpaca's 10000 bar limit", async () => {
@@ -41,5 +42,52 @@ describe("AlpacaMarketDataService", () => {
 
     expect(candles).toHaveLength(10_002);
     expect(requestedLimits).toEqual(["10000", "2"]);
+  });
+
+  it("fetches normalized chart bars with the requested timeframe and feed", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-04T20:00:00.000Z"));
+    const requestedUrls: URL[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: URL | string) => {
+        requestedUrls.push(new URL(String(url)));
+        return Response.json({
+          bars: {
+            SPY: [bar(30), bar(45)],
+          },
+        });
+      }),
+    );
+
+    const service = new AlpacaMarketDataService({ keyId: "key", secretKey: "secret", feed: "iex" });
+    const result = await service.getChartBars("SPY", { range: "5D", interval: "15m" });
+
+    expect(result.bars).toEqual([
+      {
+        time: "2026-06-02T14:30:00.000Z",
+        open: 130,
+        high: 131,
+        low: 129,
+        close: 130.5,
+        volume: 1030,
+      },
+      {
+        time: "2026-06-02T14:45:00.000Z",
+        open: 145,
+        high: 146,
+        low: 144,
+        close: 145.5,
+        volume: 1045,
+      },
+    ]);
+    expect(requestedUrls).toHaveLength(1);
+    expect(requestedUrls[0].pathname).toBe("/v2/stocks/bars");
+    expect(requestedUrls[0].searchParams.get("symbols")).toBe("SPY");
+    expect(requestedUrls[0].searchParams.get("timeframe")).toBe("15Min");
+    expect(requestedUrls[0].searchParams.get("feed")).toBe("iex");
+    expect(requestedUrls[0].searchParams.get("start")).toBe("2026-05-28T20:00:00.000Z");
+    expect(requestedUrls[0].searchParams.get("end")).toBe("2026-06-04T20:00:00.000Z");
+    expect(result.warning).toContain("not consolidated SIP");
   });
 });

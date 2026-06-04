@@ -1,6 +1,7 @@
 import type { Candle, SupportedSymbol } from "@/lib/rules/types";
+import { candleToChartBar, getChartRangeStart, intervalMinutesByInterval } from "./chart-bars";
 import { buildMarketStatus } from "./status-helpers";
-import type { MarketDataService } from "./types";
+import type { ChartBarsRequest, MarketDataService } from "./types";
 
 const BASE_PRICES: Record<SupportedSymbol, number> = {
   SPY: 532,
@@ -26,13 +27,13 @@ function random(seed: number) {
 }
 
 export class MockMarketDataService implements MarketDataService {
-  async getHistoricalCandles(symbol: SupportedSymbol, count: number) {
+  private generateCandles(symbol: SupportedSymbol, count: number, intervalMinutes: number, end = new Date()) {
     const seededRandom = random(hash(symbol));
-    const now = Date.now();
+    const now = end.getTime();
     let previousClose = BASE_PRICES[symbol];
 
     return Array.from({ length: count }, (_, index) => {
-      const timestamp = new Date(now - (count - index) * 60_000).toISOString();
+      const timestamp = new Date(now - (count - index - 1) * intervalMinutes * 60_000).toISOString();
       const wave = Math.sin(index / 17) * 0.0008;
       const change = (seededRandom() - 0.49) * 0.0035 + wave;
       const open = previousClose;
@@ -50,6 +51,21 @@ export class MockMarketDataService implements MarketDataService {
         volume,
       };
     });
+  }
+
+  async getHistoricalCandles(symbol: SupportedSymbol, count: number) {
+    return this.generateCandles(symbol, count, 1);
+  }
+
+  async getChartBars(symbol: SupportedSymbol, request: ChartBarsRequest) {
+    const end = new Date();
+    const start = getChartRangeStart(request.range, end);
+    const intervalMinutes = intervalMinutesByInterval[request.interval];
+    const count = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (intervalMinutes * 60_000)));
+
+    return {
+      bars: this.generateCandles(symbol, count, intervalMinutes, end).map(candleToChartBar),
+    };
   }
 
   async getLatestCandle(symbol: SupportedSymbol) {

@@ -65,7 +65,9 @@ export default async function Dashboard() {
     [
       "Worker status",
       workerStatus.is_running ? "running" : workerStatus.status,
-      workerStatus.last_tick_at ? `Last tick ${dateTimeLabel(workerStatus.last_tick_at)}` : "Waiting for first tick",
+      workerStatus.last_tick_at
+        ? `${workerStatus.runtime_mode} · last tick ${dateTimeLabel(workerStatus.last_tick_at)}`
+        : `${workerStatus.runtime_mode} · waiting for first tick`,
     ],
   ];
   const workerDetails = [
@@ -107,12 +109,28 @@ export default async function Dashboard() {
 
       <section className="card" style={{ marginBottom: "1rem" }}>
         <div className="card-header">
-          <h2>Local monitor</h2>
+          <h2>Market monitor</h2>
           <span className={`pill ${workerStatus.is_running ? "" : "pill-muted"}`}>
             {workerStatus.is_running ? "running" : workerStatus.status}
           </span>
         </div>
+        <p className="small" style={{ marginBottom: "0.9rem" }}>
+          API controls run the Next.js in-process worker for local SQLite development. For deployment-style testing,
+          run <code>npm run worker</code> in a separate terminal and watch this shared heartbeat.
+        </p>
         <div className="symbols worker-status-grid">
+          <div className="symbol-line">
+            <span className="small">Runtime</span>
+            <strong>{workerStatus.runtime_mode}</strong>
+          </div>
+          <div className="symbol-line">
+            <span className="small">Worker</span>
+            <strong>{workerStatus.worker_name ?? "Not reported"}</strong>
+          </div>
+          <div className="symbol-line">
+            <span className="small">Heartbeat</span>
+            <strong>{dateTimeLabel(workerStatus.heartbeat_at)}</strong>
+          </div>
           {workerDetails.map(([label, value]) => (
             <div className="symbol-line" key={label}>
               <span className="small">{label}</span>

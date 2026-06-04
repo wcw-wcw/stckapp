@@ -53,8 +53,12 @@ export type PendingAlertEvent = {
 };
 
 export type WorkerStatus = {
+  worker_id: string | null;
+  worker_name: string | null;
   status: string;
   mode: string;
+  runtime_mode: string;
+  heartbeat_at: string | null;
   last_update_at: string | null;
   last_tick_at: string | null;
   last_candle_at: string | null;
@@ -1191,6 +1195,9 @@ export function updateWorkerStatus(status: string, lastError?: string) {
 export function recordWorkerTickStatus(input: {
   status: string;
   mode: string;
+  runtimeMode?: string;
+  workerId?: string | null;
+  workerName?: string | null;
   lastCandleAt?: string | null;
   symbolsEvaluated: number;
   rulesEvaluated: number;
@@ -1208,6 +1215,10 @@ export function recordWorkerTickStatus(input: {
       `UPDATE market_worker_status
        SET status = ?,
            mode = ?,
+           runtime_mode = ?,
+           worker_id = ?,
+           worker_name = ?,
+           heartbeat_at = ?,
            last_update_at = ?,
            last_tick_at = ?,
            last_candle_at = ?,
@@ -1226,6 +1237,10 @@ export function recordWorkerTickStatus(input: {
     .run(
       input.status,
       input.mode,
+      input.runtimeMode ?? "in-process",
+      input.workerId ?? null,
+      input.workerName ?? null,
+      now,
       now,
       now,
       input.lastCandleAt ?? null,
@@ -1242,21 +1257,47 @@ export function recordWorkerTickStatus(input: {
     );
 }
 
-export function setWorkerLoopRunning(isRunning: boolean, mode: string, status?: string) {
+export function setWorkerLoopRunning(
+  isRunning: boolean,
+  mode: string,
+  status?: string,
+  runtimeMode = "in-process",
+  workerId?: string | null,
+  workerName?: string | null,
+) {
   const now = new Date().toISOString();
   getDatabase()
     .prepare(
       `UPDATE market_worker_status
-       SET status = ?, mode = ?, is_running = ?, last_update_at = ?, updated_at = ?
+       SET status = ?,
+           mode = ?,
+           runtime_mode = ?,
+           worker_id = ?,
+           worker_name = ?,
+           is_running = ?,
+           heartbeat_at = ?,
+           last_update_at = ?,
+           updated_at = ?
        WHERE id = 1`,
     )
-    .run(status ?? (isRunning ? "running" : "idle"), mode, Number(isRunning), now, now);
+    .run(
+      status ?? (isRunning ? "running" : "idle"),
+      mode,
+      runtimeMode,
+      workerId ?? null,
+      workerName ?? null,
+      Number(isRunning),
+      isRunning ? now : null,
+      now,
+      now,
+    );
 }
 
 export function getWorkerStatus() {
   return getDatabase()
     .prepare(
-      `SELECT status, mode, last_update_at, last_tick_at, last_candle_at,
+      `SELECT worker_id, worker_name, status, mode, runtime_mode, heartbeat_at,
+        last_update_at, last_tick_at, last_candle_at,
         symbols_evaluated, rules_evaluated, triggers_created, cooldown_skips,
         provider_errors, notification_attempts, is_running, next_retry_at, last_error
        FROM market_worker_status

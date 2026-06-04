@@ -36,6 +36,7 @@ import {
   outsideCooldown,
   type ProviderDataError,
 } from "./live-monitor";
+import { sanitizeWorkerError, type WorkerRuntimeMode } from "./status";
 
 export type WorkerTickResult = {
   evaluatedSymbols: number;
@@ -198,7 +199,7 @@ function skippedByProviderBackoff(symbol: SupportedSymbol, now = new Date()) {
 function rememberProviderFailure(symbol: SupportedSymbol, error: unknown, now = new Date()) {
   const previous = providerBackoffBySymbol.get(symbol);
   const failures = (previous?.failures ?? 0) + 1;
-  const message = error instanceof Error ? error.message : "Unknown provider error.";
+  const message = sanitizeWorkerError(error);
   const nextRetryAt = new Date(now.getTime() + nextProviderBackoffMs(failures)).toISOString();
   providerBackoffBySymbol.set(symbol, { failures, nextRetryAt, lastError: message });
   return { failures, nextRetryAt, lastError: message };
@@ -221,7 +222,12 @@ export function getLiveWorkerBackoffStatus() {
   return Object.fromEntries(providerBackoffBySymbol.entries());
 }
 
-export async function runLocalMockWorkerTick(input?: { continuous?: boolean }): Promise<WorkerTickResult> {
+export async function runLocalMockWorkerTick(input?: {
+  continuous?: boolean;
+  runtimeMode?: WorkerRuntimeMode;
+  workerId?: string;
+  workerName?: string;
+}): Promise<WorkerTickResult> {
   const rules = await listActiveWorkerRules();
   const grouped = groupActiveRules(rules);
   const eventIds: string[] = [];
@@ -261,6 +267,7 @@ export async function runLocalMockWorkerTick(input?: { continuous?: boolean }): 
         if ((error as ProviderDataError | undefined)?.issue === "stale") {
           lastError = `${symbol}: provider data is stale; retrying at ${backoff.nextRetryAt}.`;
         }
+        lastError = sanitizeWorkerError(lastError);
         await createProviderErrorLog({
           provider: activeMarketDataProvider,
           symbol,
@@ -288,6 +295,9 @@ export async function runLocalMockWorkerTick(input?: { continuous?: boolean }): 
     await recordWorkerTickStatus({
       status: input?.continuous ? "running" : "idle",
       mode: workerMode,
+      runtimeMode: input?.runtimeMode ?? "in-process",
+      workerId: input?.workerId,
+      workerName: input?.workerName,
       lastCandleAt,
       symbolsEvaluated: evaluatedSymbols,
       rulesEvaluated: evaluatedRules,
@@ -311,7 +321,7 @@ export async function runLocalMockWorkerTick(input?: { continuous?: boolean }): 
       eventIds,
     };
   } catch (error) {
-    await updateWorkerStatus("error", error instanceof Error ? error.message : "Unknown worker error");
+    await updateWorkerStatus("error", sanitizeWorkerError(error));
     throw error;
   }
 }
@@ -390,7 +400,7 @@ async function replayCandlesForRules(
       replayCandles,
     };
   } catch (error) {
-    await updateWorkerStatus("error", error instanceof Error ? error.message : "Unknown replay error");
+    await updateWorkerStatus("error", sanitizeWorkerError(error));
     throw error;
   }
 }

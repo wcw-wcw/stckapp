@@ -6,7 +6,9 @@ import {
   createNotificationChannel,
   createRule,
   getUserNotificationPreferences,
+  getWorkerStatus,
   listNotificationLogs,
+  recordWorkerTickStatus,
   updateUserNotificationPreferences,
   type WorkerRule,
 } from "./repositories";
@@ -149,5 +151,36 @@ describe("notification preferences", () => {
         status: "skipped_global_limit",
       },
     ]);
+  });
+
+  it("records DB-backed standalone worker heartbeat status", async () => {
+    await recordWorkerTickStatus({
+      status: "running",
+      mode: "mock",
+      runtimeMode: "standalone",
+      workerId: "worker-test",
+      workerName: "Worker Test",
+      lastCandleAt: "2026-06-02T14:35:00.000Z",
+      symbolsEvaluated: 1,
+      rulesEvaluated: 2,
+      triggersCreated: 0,
+      cooldownSkips: 1,
+      providerErrors: 0,
+      notificationAttempts: 0,
+      isRunning: true,
+      nextRetryAt: null,
+      lastError: null,
+    });
+
+    expect(await getWorkerStatus()).toMatchObject({
+      worker_id: "worker-test",
+      worker_name: "Worker Test",
+      runtime_mode: "standalone",
+      is_running: 1,
+      last_candle_at: "2026-06-02T14:35:00.000Z",
+      symbols_evaluated: 1,
+      rules_evaluated: 2,
+      cooldown_skips: 1,
+    });
   });
 });

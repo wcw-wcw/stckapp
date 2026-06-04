@@ -192,8 +192,12 @@ CREATE INDEX IF NOT EXISTS replay_datasets_user_created_idx
 
 CREATE TABLE IF NOT EXISTS market_worker_status (
   id INTEGER PRIMARY KEY CHECK (id = 1),
+  worker_id TEXT,
+  worker_name TEXT,
   status TEXT NOT NULL DEFAULT 'idle',
   mode TEXT NOT NULL DEFAULT 'mock',
+  runtime_mode TEXT NOT NULL DEFAULT 'in-process',
+  heartbeat_at TEXT,
   last_update_at TEXT,
   last_tick_at TEXT,
   last_candle_at TEXT,

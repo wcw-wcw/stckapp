@@ -60,6 +60,7 @@ export type RawServerEnv = Record<string, string | undefined>;
 export type SafeConfigDiagnostics = {
   valid: boolean;
   errors: string[];
+  warnings: string[];
   marketDataProvider: ServerEnv["MARKET_DATA_PROVIDER"] | "invalid";
   realNotificationsEnabled: boolean;
   globalDailyNotificationLimit: number | null;
@@ -74,6 +75,45 @@ export type SafeConfigDiagnostics = {
 
 function formatConfigErrors(error: z.ZodError) {
   return error.issues.map((issue) => issue.message);
+}
+
+function isProductionLike(env: RawServerEnv) {
+  return (
+    env.NODE_ENV === "production" ||
+    env.VERCEL === "1" ||
+    Boolean(env.RAILWAY_ENVIRONMENT || env.RENDER || env.FLY_APP_NAME)
+  );
+}
+
+export function getConfigWarnings(env: RawServerEnv = process.env) {
+  const warnings: string[] = [];
+  const realNotifications = env.ENABLE_REAL_NOTIFICATIONS === "true";
+  const cap = env.GLOBAL_DAILY_NOTIFICATION_LIMIT
+    ? Number(env.GLOBAL_DAILY_NOTIFICATION_LIMIT)
+    : undefined;
+
+  if (realNotifications && (cap === undefined || !Number.isFinite(cap) || cap > 25)) {
+    warnings.push(
+      "ENABLE_REAL_NOTIFICATIONS=true is set without a low GLOBAL_DAILY_NOTIFICATION_LIMIT. Start real Discord testing with a low cap.",
+    );
+  }
+
+  if (
+    env.MARKET_DATA_PROVIDER === "alpaca" &&
+    (!env.ALPACA_API_KEY_ID || !env.ALPACA_API_SECRET_KEY)
+  ) {
+    warnings.push("MARKET_DATA_PROVIDER=alpaca is set but Alpaca credentials are incomplete; the app will use mock data.");
+  }
+
+  if ((env.DATABASE_PROVIDER === "sqlite" || !env.DATABASE_PROVIDER) && isProductionLike(env)) {
+    warnings.push("SQLite is configured in a production-like environment; use DATABASE_PROVIDER=postgres for deployment.");
+  }
+
+  if (env.DATABASE_PROVIDER === "postgres" && !env.DATABASE_URL) {
+    warnings.push("DATABASE_PROVIDER=postgres is set but DATABASE_URL is missing.");
+  }
+
+  return warnings;
 }
 
 export function loadServerEnv(env: RawServerEnv = process.env): ServerEnv {
@@ -102,6 +142,7 @@ export function getSafeConfigDiagnostics(
     return {
       valid: false,
       errors: formatConfigErrors(result.error),
+      warnings: getConfigWarnings(env),
       marketDataProvider:
         rawMarketProvider === "mock" || rawMarketProvider === "alpaca" ? rawMarketProvider : "invalid",
       realNotificationsEnabled: env.ENABLE_REAL_NOTIFICATIONS === "true",
@@ -127,6 +168,7 @@ export function getSafeConfigDiagnostics(
   return {
     valid: true,
     errors: [],
+    warnings: getConfigWarnings(env),
     marketDataProvider: result.data.MARKET_DATA_PROVIDER,
     realNotificationsEnabled: result.data.ENABLE_REAL_NOTIFICATIONS,
     globalDailyNotificationLimit: result.data.GLOBAL_DAILY_NOTIFICATION_LIMIT,

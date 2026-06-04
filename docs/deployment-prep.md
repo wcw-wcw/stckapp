@@ -15,6 +15,33 @@ npm run dev
 
 With `DATABASE_PROVIDER=sqlite`, SignalDesk stores local data in `data/signaldesk.sqlite`. That file is useful for local development, but it is not suitable for Vercel persistence because deployment filesystems are ephemeral.
 
+The dashboard worker controls still use the Next.js in-process worker. That is the simplest local SQLite path and keeps `POST /api/worker/start`, `POST /api/worker/stop`, `POST /api/worker/tick`, `GET /api/worker/status`, and replay routes available.
+
+## Standalone Worker
+
+For deployment-style local testing, run the app and worker as separate processes:
+
+```sh
+npm run dev
+npm run worker
+```
+
+The standalone worker loads the same validated server environment, uses the selected repository adapter, uses the active market data provider, evaluates closed one-minute candles, and writes alert events plus notification logs through the shared repository layer. It reports a DB-backed heartbeat in `market_worker_status`, which the dashboard, `/diagnostics`, and this command can read:
+
+```sh
+npm run worker:status
+```
+
+For a single safe mock tick:
+
+```sh
+npm run worker:once
+```
+
+Local SQLite can be used by the Next.js app and standalone worker together for development, but it is still a local file database. Keep expectations modest if both processes are writing at the same time. For production, use Postgres/Neon as the shared database and run the worker on a small always-on host.
+
+Vercel Hobby cron is not appropriate for one-minute monitoring. The production shape should be a Next.js app on Vercel or similar, a shared Postgres/Neon database, and a separate always-on worker process.
+
 ## Postgres / Neon Configuration
 
 Postgres deployment prep is gated by:
@@ -58,8 +85,17 @@ npm run config:check
 npm run db:status
 npm run db:status -- --test-connection
 npm run db:schema:check
+npm run smoke:local
+npm run health:check -- https://your-app.example
 ```
 
 `npm run db:status` reports provider/config state without opening a Postgres connection. Add `-- --test-connection` only when you intentionally want to test the configured database. These commands do not print API keys, Discord webhook URLs, or database connection strings.
 
 Production secrets belong in Vercel or the worker host's environment variables. Do not commit `.env.local`, SQLite database files, API keys, or Discord webhook URLs.
+
+SignalDesk does not execute trades. Real Discord delivery remains guarded by `ENABLE_REAL_NOTIFICATIONS=true`; SMS and email remain mocked.
+
+See also:
+
+- `docs/environment.md` for host environment variables.
+- `docs/deployment-checklist.md` for a step-by-step Vercel + Neon + worker-host rollout.

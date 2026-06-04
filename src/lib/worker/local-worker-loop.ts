@@ -9,6 +9,7 @@ import {
   runLocalMockWorkerTick,
   type WorkerTickResult,
 } from "./local-mock-worker";
+import { activeWorkerWarning } from "./status";
 
 type LocalWorkerRuntime = {
   timer?: NodeJS.Timeout;
@@ -23,6 +24,8 @@ declare global {
 
 const defaultIntervalMs = Number(process.env.LOCAL_WORKER_INTERVAL_MS ?? 60_000);
 const workerMode = activeMarketDataProvider === "alpaca" ? "live" : "mock";
+const inProcessWorkerId = "next-local-worker";
+const inProcessWorkerName = "Next.js in-process worker";
 
 function runtime() {
   global.signalDeskWorkerRuntime ??= {
@@ -38,7 +41,12 @@ function isRunning() {
 async function runLoopTick() {
   const state = runtime();
   if (state.currentTick) return state.currentTick;
-  state.currentTick = runLocalMockWorkerTick({ continuous: true })
+  state.currentTick = runLocalMockWorkerTick({
+    continuous: true,
+    runtimeMode: "in-process",
+    workerId: inProcessWorkerId,
+    workerName: inProcessWorkerName,
+  })
     .catch((error) => {
       console.error("[local-worker]", error);
       return undefined;
@@ -56,8 +64,18 @@ export async function startLocalWorkerLoop(intervalMs?: number) {
   }
 
   if (!state.timer) {
+    const currentStatus = await getWorkerStatus();
+    const warning = activeWorkerWarning(currentStatus, inProcessWorkerId);
+    if (warning) console.warn(`[local-worker] ${warning}`);
     state.startedAt = new Date().toISOString();
-    await setWorkerLoopRunning(true, workerMode, "running");
+    await setWorkerLoopRunning(
+      true,
+      workerMode,
+      "running",
+      "in-process",
+      inProcessWorkerId,
+      inProcessWorkerName,
+    );
     void runLoopTick();
     state.timer = setInterval(() => {
       void runLoopTick();
@@ -74,7 +92,14 @@ export async function stopLocalWorkerLoop() {
     state.timer = undefined;
   }
   state.startedAt = undefined;
-  await setWorkerLoopRunning(false, workerMode, "idle");
+  await setWorkerLoopRunning(
+    false,
+    workerMode,
+    "idle",
+    "in-process",
+    inProcessWorkerId,
+    inProcessWorkerName,
+  );
   return getLocalWorkerStatus();
 }
 

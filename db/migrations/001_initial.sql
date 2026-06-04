@@ -213,8 +213,12 @@ CREATE INDEX replay_datasets_user_created_idx
 
 CREATE TABLE market_worker_status (
   id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+  worker_id TEXT,
+  worker_name TEXT,
   status TEXT NOT NULL DEFAULT 'idle',
   mode worker_mode NOT NULL DEFAULT 'mock',
+  runtime_mode TEXT NOT NULL DEFAULT 'in-process' CHECK (runtime_mode IN ('in-process', 'standalone')),
+  heartbeat_at TIMESTAMPTZ,
   last_update_at TIMESTAMPTZ,
   last_tick_at TIMESTAMPTZ,
   last_candle_at TIMESTAMPTZ,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getSafeConfigDiagnostics, loadServerEnv } from "./env";
+import { getConfigWarnings, getSafeConfigDiagnostics, loadServerEnv } from "./env";
 
 describe("server env validation", () => {
   it("defaults the database provider to SQLite", () => {
@@ -41,5 +41,29 @@ describe("server env validation", () => {
     });
     expect(JSON.stringify(diagnostics)).not.toContain("very-secret-password");
     expect(JSON.stringify(diagnostics)).not.toContain("alpaca-secret");
+  });
+
+  it("warns about production deployment footguns without blocking local defaults", () => {
+    expect(getConfigWarnings({})).toEqual([]);
+    expect(
+      getConfigWarnings({
+        NODE_ENV: "production",
+        DATABASE_PROVIDER: "sqlite",
+      }),
+    ).toContain("SQLite is configured in a production-like environment; use DATABASE_PROVIDER=postgres for deployment.");
+    expect(
+      getConfigWarnings({
+        MARKET_DATA_PROVIDER: "alpaca",
+        ALPACA_API_KEY_ID: "key",
+      }),
+    ).toContain("MARKET_DATA_PROVIDER=alpaca is set but Alpaca credentials are incomplete; the app will use mock data.");
+    expect(
+      getConfigWarnings({
+        ENABLE_REAL_NOTIFICATIONS: "true",
+        GLOBAL_DAILY_NOTIFICATION_LIMIT: "100",
+      }),
+    ).toContain(
+      "ENABLE_REAL_NOTIFICATIONS=true is set without a low GLOBAL_DAILY_NOTIFICATION_LIMIT. Start real Discord testing with a low cap.",
+    );
   });
 });

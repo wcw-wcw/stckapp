@@ -4,6 +4,8 @@ import {
   listNotificationLogs,
 } from "@/lib/db/repositories";
 import { getProviderDiagnostics } from "@/lib/market/diagnostics";
+import { getAppVersion } from "@/lib/version";
+import { isRecentWorkerHeartbeat } from "@/lib/worker/status";
 import { MaintenanceCleanupCard } from "./maintenance-cleanup-card";
 
 const timeLabel = (timestamp?: string | null) =>
@@ -21,6 +23,8 @@ export default async function DiagnosticsPage() {
   const user = await requireUser();
   const diagnostics = await getProviderDiagnostics();
   const worker = await getWorkerStatus();
+  const version = getAppVersion();
+  const workerHeartbeatFresh = isRecentWorkerHeartbeat(worker);
   const notificationLogs = await listNotificationLogs(user.id, 10);
 
   return (
@@ -57,7 +61,48 @@ export default async function DiagnosticsPage() {
         <div className="card">
           <div className="stat-label">Worker</div>
           <div className="stat-value">{worker.is_running ? "Running" : worker.status}</div>
-          <div className="small">Last tick {timeLabel(worker.last_tick_at)}</div>
+          <div className="small">
+            {worker.runtime_mode} · {workerHeartbeatFresh ? "fresh heartbeat" : `heartbeat ${timeLabel(worker.heartbeat_at)}`}
+          </div>
+        </div>
+      </section>
+
+      {diagnostics.config.warnings.length > 0 && (
+        <section className="card" style={{ marginTop: "1rem" }}>
+          <div className="card-header">
+            <h2>Deployment guardrails</h2>
+            <span className="pill pill-warning">{diagnostics.config.warnings.length} warning{diagnostics.config.warnings.length === 1 ? "" : "s"}</span>
+          </div>
+          <div className="results">
+            {diagnostics.config.warnings.map((warning) => (
+              <div className="result" key={warning}>
+                <span className="small">Warning</span>
+                <strong>{warning}</strong>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <div className="card-header">
+          <h2>Worker runtime</h2>
+          <span className={`pill ${worker.is_running ? "" : "pill-muted"}`}>
+            {worker.is_running ? "running" : worker.status}
+          </span>
+        </div>
+        <p className="small">
+          Next.js API routes can still start and stop the in-process local worker. The standalone worker is a separate
+          Node process for deployment-style testing and reports through the same database heartbeat.
+        </p>
+        <div className="results" style={{ marginTop: "0.8rem" }}>
+          <div className="result"><span className="small">Runtime</span><strong>{worker.runtime_mode}</strong></div>
+          <div className="result"><span className="small">Worker</span><strong>{worker.worker_name ?? "Never reported"}</strong></div>
+          <div className="result"><span className="small">Worker ID</span><strong>{worker.worker_id ?? "n/a"}</strong></div>
+          <div className="result"><span className="small">Heartbeat</span><strong>{timeLabel(worker.heartbeat_at)}</strong></div>
+          <div className="result"><span className="small">Heartbeat fresh</span><strong>{workerHeartbeatFresh ? "Yes" : "No"}</strong></div>
+          <div className="result"><span className="small">Last tick</span><strong>{timeLabel(worker.last_tick_at)}</strong></div>
+          <div className="result"><span className="small">Mode</span><strong>{worker.mode}</strong></div>
         </div>
       </section>
 
@@ -110,6 +155,18 @@ export default async function DiagnosticsPage() {
           <div className="result">
             <span className="small">Real Discord</span>
             <strong>{diagnostics.config.discordRealNotificationSafety === "real-enabled" ? "Enabled" : "Mocked"}</strong>
+          </div>
+          <div className="result">
+            <span className="small">Notification cap</span>
+            <strong>{diagnostics.config.globalDailyNotificationLimit ?? "Invalid"}</strong>
+          </div>
+          <div className="result">
+            <span className="small">Version</span>
+            <strong>{version.packageVersion}</strong>
+          </div>
+          <div className="result">
+            <span className="small">Commit</span>
+            <strong>{version.commitSha ? version.commitSha.slice(0, 12) : "n/a"}</strong>
           </div>
         </div>
         <p className="notice" style={{ marginTop: "0.8rem" }}>{diagnostics.database.note}</p>

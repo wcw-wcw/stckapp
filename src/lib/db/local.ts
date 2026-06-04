@@ -28,6 +28,10 @@ function ensureColumn(database: DatabaseSync, table: string, column: string, def
 }
 
 function ensureLocalSchemaUpgrades(database: DatabaseSync) {
+  ensureColumn(database, "market_worker_status", "worker_id", "TEXT");
+  ensureColumn(database, "market_worker_status", "worker_name", "TEXT");
+  ensureColumn(database, "market_worker_status", "runtime_mode", "TEXT NOT NULL DEFAULT 'in-process'");
+  ensureColumn(database, "market_worker_status", "heartbeat_at", "TEXT");
   ensureColumn(database, "market_worker_status", "last_tick_at", "TEXT");
   ensureColumn(database, "market_worker_status", "last_candle_at", "TEXT");
   ensureColumn(database, "market_worker_status", "symbols_evaluated", "INTEGER NOT NULL DEFAULT 0");

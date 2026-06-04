@@ -977,6 +977,9 @@ export async function updateWorkerStatus(status: string, lastError?: string) {
 export async function recordWorkerTickStatus(input: {
   status: string;
   mode: string;
+  runtimeMode?: string;
+  workerId?: string | null;
+  workerName?: string | null;
   lastCandleAt?: string | null;
   symbolsEvaluated: number;
   rulesEvaluated: number;
@@ -993,23 +996,30 @@ export async function recordWorkerTickStatus(input: {
     `UPDATE market_worker_status
      SET status = $1,
          mode = $2,
-         last_update_at = $3,
-         last_tick_at = $3,
-         last_candle_at = $4,
-         symbols_evaluated = $5,
-         rules_evaluated = $6,
-         triggers_created = $7,
-         cooldown_skips = $8,
-         provider_errors = $9,
-         notification_attempts = $10,
-         is_running = $11,
-         next_retry_at = $12,
-         last_error = $13,
-         updated_at = $3
+         runtime_mode = $3,
+         worker_id = $4,
+         worker_name = $5,
+         heartbeat_at = $6,
+         last_update_at = $6,
+         last_tick_at = $6,
+         last_candle_at = $7,
+         symbols_evaluated = $8,
+         rules_evaluated = $9,
+         triggers_created = $10,
+         cooldown_skips = $11,
+         provider_errors = $12,
+         notification_attempts = $13,
+         is_running = $14,
+         next_retry_at = $15,
+         last_error = $16,
+         updated_at = $6
      WHERE id = 1`,
     [
       input.status,
       input.mode,
+      input.runtimeMode ?? "in-process",
+      input.workerId ?? null,
+      input.workerName ?? null,
       now,
       input.lastCandleAt ?? null,
       input.symbolsEvaluated,
@@ -1025,20 +1035,48 @@ export async function recordWorkerTickStatus(input: {
   );
 }
 
-export async function setWorkerLoopRunning(isRunning: boolean, mode: string, status?: string) {
+export async function setWorkerLoopRunning(
+  isRunning: boolean,
+  mode: string,
+  status?: string,
+  runtimeMode = "in-process",
+  workerId?: string | null,
+  workerName?: string | null,
+) {
   const now = new Date().toISOString();
   await query(
     `UPDATE market_worker_status
-     SET status = $1, mode = $2, is_running = $3, last_update_at = $4, updated_at = $4
+     SET status = $1,
+         mode = $2,
+         runtime_mode = $3,
+         worker_id = $4,
+         worker_name = $5,
+         is_running = $6,
+         heartbeat_at = $7,
+         last_update_at = $8,
+         updated_at = $8
      WHERE id = 1`,
-    [status ?? (isRunning ? "running" : "idle"), mode, isRunning, now],
+    [
+      status ?? (isRunning ? "running" : "idle"),
+      mode,
+      runtimeMode,
+      workerId ?? null,
+      workerName ?? null,
+      isRunning,
+      isRunning ? now : null,
+      now,
+    ],
   );
 }
 
 export async function getWorkerStatus() {
   const result = await query<{
+    worker_id: string | null;
+    worker_name: string | null;
     status: string;
     mode: string;
+    runtime_mode: string;
+    heartbeat_at: Date | string | null;
     last_update_at: Date | string | null;
     last_tick_at: Date | string | null;
     last_candle_at: Date | string | null;
@@ -1052,7 +1090,8 @@ export async function getWorkerStatus() {
     next_retry_at: Date | string | null;
     last_error: string | null;
   }>(
-    `SELECT status, mode, last_update_at, last_tick_at, last_candle_at,
+    `SELECT worker_id, worker_name, status, mode, runtime_mode, heartbeat_at,
+      last_update_at, last_tick_at, last_candle_at,
       symbols_evaluated, rules_evaluated, triggers_created, cooldown_skips,
       provider_errors, notification_attempts, is_running, next_retry_at, last_error
      FROM market_worker_status
@@ -1061,6 +1100,7 @@ export async function getWorkerStatus() {
   const row = result.rows[0];
   return {
     ...row,
+    heartbeat_at: toIso(row.heartbeat_at),
     last_update_at: toIso(row.last_update_at),
     last_tick_at: toIso(row.last_tick_at),
     last_candle_at: toIso(row.last_candle_at),

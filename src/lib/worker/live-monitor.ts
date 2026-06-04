@@ -1,7 +1,7 @@
 import { buildIndicatorStates } from "@/lib/market/indicators";
 import type { MarketDataService } from "@/lib/market/types";
 import { evaluateRule } from "@/lib/rules/evaluate";
-import type { AlertRule, IndicatorState, SupportedSymbol } from "@/lib/rules/types";
+import type { AlertRule, IndicatorState, RuleEvaluationContext, SupportedSymbol } from "@/lib/rules/types";
 
 export type RuleMatch = {
   rule: AlertRule;
@@ -160,12 +160,13 @@ export async function evaluateSymbolOnce(
   marketData: MarketDataService,
   symbol: SupportedSymbol,
   rules: AlertRule[],
+  contexts?: Map<AlertRule, RuleEvaluationContext>,
 ) {
   const { current, previous } = await loadClosedCandleState(marketData, symbol);
 
   return rules
     .filter((rule) => rule.symbol === symbol && rule.isActive)
-    .filter((rule) => evaluateRule(rule, current, previous))
+    .filter((rule) => evaluateRule(rule, current, previous, contexts?.get(rule)))
     .map<RuleMatch>((rule) => ({
       rule,
       triggerPrice: current.price,

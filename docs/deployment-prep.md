@@ -70,6 +70,13 @@ DATABASE_PROVIDER=postgres DATABASE_URL=postgresql://... npm run db:migrate:post
 
 The migration command refuses to run unless `DATABASE_PROVIDER=postgres` and `DATABASE_URL` are present. It applies `db/migrations/001_initial.sql` and does not print the connection string.
 
+If a Neon/Postgres database already has the initial schema from before saved symbol levels existed, do not rerun the initial migration. Apply the safe incremental saved-level migration instead:
+
+```sh
+DATABASE_PROVIDER=postgres DATABASE_URL=postgresql://... npm run db:migrate:postgres -- --migration=002_symbol_levels.sql --dry-run
+DATABASE_PROVIDER=postgres DATABASE_URL=postgresql://... npm run db:migrate:postgres -- --migration=002_symbol_levels.sql
+```
+
 Local SQLite data does not automatically transfer to Neon. `data/signaldesk.sqlite` is a separate local file, so production starts with the Postgres schema and whatever data you explicitly seed or import later.
 
 ## Notifications
@@ -90,9 +97,9 @@ With `MARKET_DATA_PROVIDER=alpaca`, the chart endpoint requests Alpaca historica
 
 The chart includes hover/crosshair OHLCV details, a subtle volume histogram, latest-bar/provider/range/interval metadata, and sanitized stale/IEX caveats when applicable.
 
-Saved symbol levels are stored in SQLite or Postgres as user-owned planning aids. They can be created, edited, deleted, and drawn as horizontal price lines on supported-symbol charts. Saved levels are not trading advice, are not quick alerts, are not connected to the rule evaluator or worker yet, and do not execute trades.
+Saved symbol levels are stored in SQLite or Postgres as user-owned planning aids. They can be created, edited, deleted, drawn as horizontal price lines on supported-symbol charts, and used as optional alert targets. Quick price alerts create normal saved rules under the hood, so the local worker (`npm run worker` or a local tick/replay) evaluates them with the same evaluator and alert history as full rule-builder rules.
 
-Raw historical chart candles are not stored in SQLite or Postgres in this pass. The app still has no trade execution, arbitrary ticker support, quick alerts, or saved-level rule integration.
+Rules can target custom numeric prices, saved levels owned by the current user for the same symbol, within-percent tolerances, and within-dollar tolerances. Expired saved levels cannot be selected for new rules; existing rules that point to missing, deleted, mismatched-symbol, or expired levels show warnings and skip evaluation for that condition. Raw historical chart candles are not stored in SQLite or Postgres in this pass. The app still has no trade execution, arbitrary ticker support, dynamic lookback levels, or trendlines.
 
 ## Safe Checks
 

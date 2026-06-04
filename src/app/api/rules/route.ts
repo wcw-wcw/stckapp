@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
 import { createRule, hasVerifiedNotificationChannel, listRules } from "@/lib/db/repositories";
+import { validateSavedLevelTargets } from "@/lib/rules/level-context";
 import { validateAlertRule } from "@/lib/rules/schema";
 
 export async function GET() {
@@ -25,6 +26,10 @@ export async function POST(request: Request) {
       { error: "Add a verified notification channel before enabling rule notifications." },
       { status: 400 },
     );
+  }
+  const savedLevelIssues = await validateSavedLevelTargets(user.id, result.data);
+  if (savedLevelIssues.length) {
+    return NextResponse.json({ error: savedLevelIssues.join(" ") }, { status: 400 });
   }
   return NextResponse.json({ rule: await createRule(user.id, result.data) }, { status: 201 });
 }

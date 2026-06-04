@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth/require-user";
 import { listRules } from "@/lib/db/repositories";
+import { QuickPriceAlert } from "./quick-price-alert";
 import { RuleManager } from "./rule-manager";
 
 export default async function RulesPage() {
@@ -16,7 +17,10 @@ export default async function RulesPage() {
         </div>
         <Link className="button" href="/rules/new">Create rule</Link>
       </div>
-      <RuleManager initialRules={rules} />
+      <div className="grid split-grid">
+        <QuickPriceAlert />
+        <RuleManager initialRules={rules} />
+      </div>
     </div>
   );
 }

@@ -9,8 +9,9 @@ import {
 } from "@/lib/db/repositories";
 import { activeMarketDataProvider, marketData } from "@/lib/market/provider";
 import { backtestRule } from "@/lib/rules/backtest";
-import { previewRule } from "@/lib/rules/preview";
-import type { AlertRule } from "@/lib/rules/types";
+import { buildRuleEvaluationContext } from "@/lib/rules/level-context";
+import { previewRule, ruleWarnings } from "@/lib/rules/preview";
+import type { AlertRule, RuleEvaluationContext } from "@/lib/rules/types";
 
 const ranges = [
   { label: "1D", candles: 450 },
@@ -42,9 +43,10 @@ async function runRangeBacktest(
   ruleId: string,
   rule: AlertRule,
   range: (typeof ranges)[number],
+  context?: RuleEvaluationContext,
 ) {
   const candles = await marketData.getHistoricalCandles(rule.symbol, range.candles);
-  const result = backtestRule(rule, candles);
+  const result = backtestRule(rule, candles, context);
   return upsertBacktestResult({
     userId,
     ruleId,
@@ -65,11 +67,13 @@ export default async function RuleDetailPage({
   const { id } = await params;
   const rule = await getRule(user.id, id);
   if (!rule) notFound();
+  const ruleContext = await buildRuleEvaluationContext(user.id, rule);
+  const warnings = ruleWarnings(rule, ruleContext);
 
   const rangeResults = await Promise.all(
     ranges.map(async (range) => {
       try {
-        return await runRangeBacktest(user.id, id, rule, range);
+        return await runRangeBacktest(user.id, id, rule, range, ruleContext);
       } catch (error) {
         return {
           rangeLabel: range.label,
@@ -93,7 +97,7 @@ export default async function RuleDetailPage({
         <div>
           <p className="eyebrow">Rule detail</p>
           <h1>{rule.name}</h1>
-          <p className="subhead">{previewRule(rule)}</p>
+          <p className="subhead">{previewRule(rule, ruleContext)}</p>
         </div>
         <div className="header-actions">
           <Link className="button button-secondary" href="/rules">Manage rules</Link>
@@ -123,6 +127,13 @@ export default async function RuleDetailPage({
           <div className="small">{primary?.rangeLabel ?? "1M"} triggers</div>
         </div>
       </section>
+
+      {warnings.length > 0 && (
+        <section className="card" style={{ marginBottom: "1rem" }}>
+          <div className="card-header"><h2>Rule warnings</h2></div>
+          {warnings.map((warning) => <p className="notice" key={warning}>{warning}</p>)}
+        </section>
+      )}
 
       <section className="grid split-grid">
         <div className="card">

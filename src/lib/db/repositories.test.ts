@@ -7,6 +7,7 @@ import {
   createSymbolLevel,
   createRule,
   deleteSymbolLevel,
+  getSymbolLevel,
   getUserNotificationPreferences,
   getWorkerStatus,
   listSymbolLevels,
@@ -16,6 +17,7 @@ import {
   updateUserNotificationPreferences,
   type WorkerRule,
 } from "./repositories";
+import { buildRuleEvaluationContext, validateSavedLevelTargets } from "@/lib/rules/level-context";
 import { sendRuleNotifications } from "@/lib/worker/local-mock-worker";
 import type { AlertRule, IndicatorState } from "@/lib/rules/types";
 
@@ -257,6 +259,66 @@ describe("saved symbol levels", () => {
     expect(await updateSymbolLevel("user-2", created!.id, { name: "Borrowed" })).toBeNull();
     expect(await deleteSymbolLevel("user-2", created!.id)).toBe(false);
     expect(await listSymbolLevels(userId, "SPY")).toHaveLength(1);
+  });
+
+  it("resolves saved-level targets only for the owning user and matching symbol", async () => {
+    const created = await createSymbolLevel(userId, {
+      symbol: "SPY",
+      name: "3-day low",
+      price: 536.4,
+      levelType: "support",
+    });
+    const rule = {
+      ...alertRule,
+      smsEnabled: false,
+      conditions: [
+        {
+          left: "price",
+          operator: "touches",
+          right: { type: "saved_level", levelId: created!.id, levelName: created!.name },
+        },
+      ],
+    } satisfies AlertRule;
+
+    expect(await validateSavedLevelTargets(userId, rule)).toEqual([]);
+    expect(await validateSavedLevelTargets("user-2", rule)).toEqual(["Choose a saved level you own."]);
+    expect(await buildRuleEvaluationContext(userId, rule)).toEqual({
+      savedLevels: { [created!.id]: { value: 536.4, label: "3-day low" } },
+    });
+    expect(await getSymbolLevel("user-2", created!.id)).toBeNull();
+  });
+
+  it("warns and skips expired saved-level targets", async () => {
+    const created = await createSymbolLevel(userId, {
+      symbol: "SPY",
+      name: "expired support",
+      price: 500,
+      levelType: "support",
+      expiresAt: "2026-06-01T14:00:00.000Z",
+    });
+    const rule = {
+      ...alertRule,
+      smsEnabled: false,
+      conditions: [
+        {
+          left: "price",
+          operator: "touches",
+          right: { type: "saved_level", levelId: created!.id, levelName: created!.name },
+        },
+      ],
+    } satisfies AlertRule;
+
+    expect(await validateSavedLevelTargets(userId, rule)).toEqual([
+      "Saved level \"expired support\" is expired. Choose an active saved level.",
+    ]);
+    expect(await buildRuleEvaluationContext(userId, rule, new Date("2026-06-02T14:00:00.000Z"))).toMatchObject({
+      savedLevels: {
+        [created!.id]: {
+          label: "expired support",
+          warning: "Saved level \"expired support\" is expired; this condition will not trigger.",
+        },
+      },
+    });
   });
 
   it("enforces supported symbols, positive prices, and valid level types", async () => {

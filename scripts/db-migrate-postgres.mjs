@@ -3,8 +3,15 @@ import { join } from "node:path";
 import pg from "pg";
 import { loadServerEnv } from "../src/lib/config/env.ts";
 
-const migrationPath = join(process.cwd(), "db", "migrations", "001_initial.sql");
 const dryRun = process.argv.includes("--dry-run");
+const migrationArg = process.argv.find((arg) => arg.startsWith("--migration="));
+const migrationName = migrationArg?.split("=").at(1) ?? "001_initial.sql";
+const allowedMigrations = new Set(["001_initial.sql", "002_symbol_levels.sql"]);
+const migrationPath = join(process.cwd(), "db", "migrations", migrationName);
+
+if (!allowedMigrations.has(migrationName)) {
+  throw new Error("Choose a known migration: 001_initial.sql or 002_symbol_levels.sql.");
+}
 
 function sanitizePostgresError(error) {
   const message = error instanceof Error ? error.message : String(error);
@@ -33,7 +40,7 @@ async function main() {
     console.log(JSON.stringify({
       ok: true,
       dryRun: true,
-      migration: "db/migrations/001_initial.sql",
+      migration: `db/migrations/${migrationName}`,
       databaseProvider: "postgres",
       databaseUrlPresent: true,
       note: "Dry run only. No database connection was opened and no SQL was applied.",
@@ -53,15 +60,15 @@ async function main() {
     console.log(JSON.stringify({
       ok: true,
       dryRun: false,
-      migration: "db/migrations/001_initial.sql",
+      migration: `db/migrations/${migrationName}`,
       databaseProvider: "postgres",
       databaseUrlPresent: true,
-      note: "Initial Postgres migration applied.",
+      note: "Postgres migration applied.",
     }, null, 2));
   } catch (error) {
     console.error(JSON.stringify({
       ok: false,
-      migration: "db/migrations/001_initial.sql",
+      migration: `db/migrations/${migrationName}`,
       databaseProvider: "postgres",
       databaseUrlPresent: true,
       error: sanitizePostgresError(error),

@@ -25,6 +25,7 @@ import {
   notifications,
 } from "@/lib/notifications/notification-service";
 import { evaluateRule } from "@/lib/rules/evaluate";
+import { buildRuleEvaluationContext } from "@/lib/rules/level-context";
 import { previewRule } from "@/lib/rules/preview";
 import type { IndicatorState, SupportedSymbol } from "@/lib/rules/types";
 import type { Candle } from "@/lib/rules/types";
@@ -280,13 +281,14 @@ export async function runLocalMockWorkerTick(input?: {
       for (const rule of symbolRules as WorkerRule[]) {
         evaluatedRules += 1;
         if (rule.marketHoursOnly && !isMarketHours(current.timestamp)) continue;
-        if (!evaluateRule(rule, current, previous)) continue;
+        const context = await buildRuleEvaluationContext(rule.userId, rule);
+        if (!evaluateRule(rule, current, previous, context)) continue;
         if (alreadyTriggeredCandle(rule, current)) continue;
         if (!outsideCooldown(rule, current)) {
           skippedCooldown += 1;
           continue;
         }
-        const eventId = await createAlertEvent(rule, current, previewRule(rule));
+        const eventId = await createAlertEvent(rule, current, previewRule(rule, context));
         if (!eventId) continue;
         notificationAttempts += await sendRuleNotifications(rule, current, eventId);
         eventIds.push(eventId);
@@ -362,7 +364,8 @@ async function replayCandlesForRules(
         for (const rule of symbolRules as WorkerRule[]) {
           evaluatedRules += 1;
           if (rule.marketHoursOnly && !isMarketHours(current.timestamp)) continue;
-          if (!evaluateRule(rule, current, previous)) continue;
+          const context = await buildRuleEvaluationContext(rule.userId, rule);
+          if (!evaluateRule(rule, current, previous, context)) continue;
 
           const lastTriggeredAt = lastTriggeredByRule.get(rule.id);
           if (
@@ -373,7 +376,7 @@ async function replayCandlesForRules(
             continue;
           }
 
-          const eventId = await createAlertEvent(rule, current, previewRule(rule));
+          const eventId = await createAlertEvent(rule, current, previewRule(rule, context));
           if (!eventId) continue;
           const performance = calculateAvailablePerformance(candles, {
             triggeredAt: current.timestamp,

@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
+import { getCurrentUser } from "@/lib/auth/session";
+import { buildRuleEvaluationContext } from "@/lib/rules/level-context";
 import { previewRule } from "@/lib/rules/preview";
 import { validateAlertRule } from "@/lib/rules/schema";
 
 export async function POST(request: Request) {
+  const user = await getCurrentUser();
   const result = validateAlertRule(await request.json());
   if (!result.success) {
     return NextResponse.json(
@@ -10,5 +13,6 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  return NextResponse.json({ preview: previewRule(result.data) });
+  const context = user ? await buildRuleEvaluationContext(user.id, result.data) : undefined;
+  return NextResponse.json({ preview: previewRule(result.data, context) });
 }

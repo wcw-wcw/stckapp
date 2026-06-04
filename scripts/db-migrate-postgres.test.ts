@@ -2,6 +2,30 @@ import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 
 describe("postgres migration script safety", () => {
+  it("can dry-run the incremental symbol-level migration", () => {
+    const env = {
+      ...process.env,
+      DATABASE_PROVIDER: "postgres",
+      DATABASE_URL: "postgresql://user:secret@example.test/signaldesk",
+    };
+
+    const stdout = execFileSync(
+      "node",
+      [
+        "--disable-warning=MODULE_TYPELESS_PACKAGE_JSON",
+        "--experimental-strip-types",
+        "scripts/db-migrate-postgres.mjs",
+        "--migration=002_symbol_levels.sql",
+        "--dry-run",
+      ],
+      { cwd: process.cwd(), env, encoding: "utf8", stdio: "pipe" },
+    );
+
+    expect(stdout).toContain("db/migrations/002_symbol_levels.sql");
+    expect(stdout).not.toContain("secret");
+    expect(stdout).not.toContain("example.test");
+  });
+
   it("refuses to run unless DATABASE_PROVIDER=postgres", () => {
     const env = {
       ...process.env,

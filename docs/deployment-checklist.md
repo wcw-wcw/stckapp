@@ -12,6 +12,12 @@ DATABASE_PROVIDER=postgres DATABASE_URL=postgresql://... npm run db:migrate:post
 DATABASE_PROVIDER=postgres DATABASE_URL=postgresql://... npm run db:migrate:postgres
 ```
 
+- If the database already had the initial schema before saved symbol levels were added, run the incremental migration instead:
+
+```sh
+DATABASE_PROVIDER=postgres DATABASE_URL=postgresql://... npm run db:migrate:postgres -- --migration=002_symbol_levels.sql
+```
+
 - Run `npm run db:schema:check`.
 - Run `npm run smoke:local`.
 
@@ -30,6 +36,8 @@ SIGNALDESK_BASE_URL=https://your-app.example npm run health:check
 - Open a supported symbol detail page and verify the chart controls load `1D`, `5D`, `1M`, `1m`, `5m`, `15m`, and `1h` data from `/api/market/bars/:symbol`.
 - Verify the chart hover/crosshair legend shows timestamp, OHLC, and volume, and that the volume histogram is visible without cluttering the candle view.
 - Create a saved symbol level, confirm it appears only for the signed-in user, and verify it draws as a horizontal planning line on the chart.
+- Create a quick price alert from `/rules` and confirm it appears as a normal saved rule.
+- Create or edit a full rule that targets a custom price or an active saved level, including within-percent and within-dollar variants.
 
 ## Worker
 
@@ -43,6 +51,7 @@ npm run worker
 
 - Verify the worker heartbeat with `npm run worker:status` on the worker host or `/diagnostics` in the app.
 - Confirm the worker reports `runtimeMode=standalone`.
+- Confirm a local tick or replay can evaluate custom-price and saved-level rules through the normal alert history path.
 
 ## Notifications
 
@@ -56,8 +65,8 @@ npm run worker
 - Watch `/diagnostics` for DB provider status, active market provider, worker heartbeat freshness, provider errors, notification logs, and guardrail warnings.
 - Alpaca Basic/IEX data can differ from SIP or broker charts and may look stale outside regular market hours.
 - Chart bars are fetched on demand and raw historical candles are not stored in the database.
-- Saved symbol levels are planning aids only. They are not trading advice, quick alerts, worker alerts, or rule-builder inputs yet.
-- SignalDesk has no trade execution, quick alerts, or arbitrary ticker support in this deployment pass.
+- Saved symbol levels are planning aids and optional alert targets. They are not trading advice and do not execute trades.
+- SignalDesk has no trade execution, arbitrary ticker support, dynamic lookback levels, or trendlines in this deployment pass.
 
 ## Rollback
 

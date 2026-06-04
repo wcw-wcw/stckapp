@@ -9,9 +9,12 @@ import {
   type AlertRule,
   type BacktestResult,
   type Indicator,
+  type RuleTarget,
   type RuleCondition,
   type RuleOperator,
+  type SavedLevelTarget,
 } from "@/lib/rules/types";
+import type { SavedSymbolLevel } from "@/lib/symbol-levels";
 
 const indicatorLabels: Record<Indicator, string> = {
   price: "Price",
@@ -39,6 +42,7 @@ const operatorLabels: Record<RuleOperator, string> = {
   "<=": "At most",
   touches: "Touches",
   within_percent: "Within percent",
+  within_dollars: "Within dollars",
   breaks_above: "Breaks above",
   breaks_below: "Breaks below",
 };
@@ -57,12 +61,18 @@ const initialRule: AlertRule = {
 
 export default function RuleBuilder() {
   const [rule, setRule] = useState(initialRule);
+  const [levels, setLevels] = useState<SavedSymbolLevel[]>([]);
   const [results, setResults] = useState<BacktestResult>();
   const [error, setError] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState<string>();
   const preview = useMemo(() => previewRule(rule), [rule]);
+  const priceIndicators = useMemo(
+    () => INDICATORS.filter((indicator) => indicator !== "volume" && indicator !== "average_volume") as Indicator[],
+    [],
+  );
+  const activeLevels = useMemo(() => levels.filter((level) => !level.isExpired), [levels]);
 
   useEffect(() => {
     fetch("/api/auth/me").then((response) => {
@@ -70,11 +80,50 @@ export default function RuleBuilder() {
     });
   }, []);
 
+  useEffect(() => {
+    fetch(`/api/symbol-levels?symbol=${rule.symbol}`)
+      .then((response) => (response.ok ? response.json() : { levels: [] }))
+      .then((payload: { levels?: SavedSymbolLevel[] }) => setLevels(payload.levels ?? []))
+      .catch(() => setLevels([]));
+  }, [rule.symbol]);
+
+  const targetValue = (right: RuleCondition["right"]) =>
+    typeof right === "string" ? right : right.type === "indicator" ? right.indicator : right.type;
+
+  const rightFromValue = (value: string): RuleCondition["right"] => {
+    if (value === "custom_price") return { type: "custom_price", price: 1 };
+    if (value === "saved_level") {
+      const level = activeLevels[0];
+      return {
+        type: "saved_level",
+        levelId: level?.id ?? "00000000-0000-0000-0000-000000000000",
+        levelName: level?.name,
+        price: level?.price,
+      } satisfies SavedLevelTarget;
+    }
+    return value as Indicator;
+  };
+
+  const isPriceLike = (indicator: Indicator) => priceIndicators.includes(indicator);
+
+  const compatibleRightOptions = (condition: RuleCondition) => {
+    if (condition.left === "volume") return ["average_volume"] as const;
+    if (condition.left === "average_volume") return ["volume"] as const;
+    return [...priceIndicators, "custom_price", "saved_level"];
+  };
+
+  const compatibleOperators = (condition: RuleCondition) => {
+    if (!isPriceLike(condition.left)) {
+      return OPERATORS.filter((operator) => operator !== "within_dollars") as RuleOperator[];
+    }
+    return [...OPERATORS] as RuleOperator[];
+  };
+
   const updateCondition = (index: number, patch: Partial<RuleCondition>) =>
     setRule((current) => ({
       ...current,
       conditions: current.conditions.map((condition, conditionIndex) =>
-        conditionIndex === index ? { ...condition, ...patch } : condition,
+        conditionIndex === index ? normalizeCondition({ ...condition, ...patch }) : condition,
       ),
     }));
 
@@ -96,6 +145,22 @@ export default function RuleBuilder() {
         { left: "volume", operator: ">=", right: "average_volume", params: { multiplier: 1.5, lookback: 20 } },
       ],
     }));
+
+  const normalizeCondition = (condition: RuleCondition): RuleCondition => {
+    const options = compatibleRightOptions(condition);
+    let right = condition.right;
+    if (!options.includes(targetValue(right) as never)) right = options[0] as Indicator;
+    let operator = condition.operator;
+    if (!compatibleOperators(condition).includes(operator)) operator = ">=";
+    const params = { ...condition.params };
+    if (operator !== "within_percent") delete params.percent;
+    if (operator !== "within_dollars") delete params.dollars;
+    if (targetValue(right) !== "average_volume") {
+      delete params.multiplier;
+      delete params.lookback;
+    }
+    return { ...condition, right, operator, params };
+  };
 
   const removeCondition = (index: number) =>
     setRule((current) => ({
@@ -185,13 +250,44 @@ export default function RuleBuilder() {
                         {INDICATORS.map((indicator) => <option key={indicator} value={indicator}>{indicatorLabels[indicator]}</option>)}
                       </select>
                       <select aria-label={`Condition ${index + 1} operator`} value={condition.operator} onChange={(event) => updateCondition(index, { operator: event.target.value as RuleOperator })}>
-                        {OPERATORS.map((operator) => <option key={operator} value={operator}>{operatorLabels[operator]}</option>)}
+                        {compatibleOperators(condition).map((operator) => <option key={operator} value={operator}>{operatorLabels[operator]}</option>)}
                       </select>
-                      <select aria-label={`Condition ${index + 1} right value`} value={condition.right} onChange={(event) => updateCondition(index, { right: event.target.value as Indicator })}>
-                        {INDICATORS.map((indicator) => <option key={indicator} value={indicator}>{indicatorLabels[indicator]}</option>)}
+                      <select aria-label={`Condition ${index + 1} right value`} value={targetValue(condition.right)} onChange={(event) => updateCondition(index, { right: rightFromValue(event.target.value) })}>
+                        {compatibleRightOptions(condition).map((option) => (
+                          <option key={option} value={option}>
+                            {option === "custom_price" ? "Custom price" : option === "saved_level" ? "Saved level" : indicatorLabels[option as Indicator]}
+                          </option>
+                        ))}
                       </select>
                     </div>
-                    {condition.right === "average_volume" && (
+                    {targetValue(condition.right) === "custom_price" && (
+                      <div className="condition-params">
+                        <div className="field">
+                          <label htmlFor={`custom-price-${index}`}>Custom price</label>
+                          <input id={`custom-price-${index}`} min="0.01" step="0.01" type="number" value={(condition.right as RuleTarget & { price?: number }).price ?? 1} onChange={(event) => updateCondition(index, { right: { type: "custom_price", price: Number(event.target.value) } })} />
+                        </div>
+                      </div>
+                    )}
+                    {targetValue(condition.right) === "saved_level" && (
+                      <div className="condition-params">
+                        <div className="field">
+                          <label htmlFor={`saved-level-${index}`}>Saved level</label>
+                          <select
+                            id={`saved-level-${index}`}
+                            value={(condition.right as SavedLevelTarget).levelId}
+                            onChange={(event) => {
+                              const level = activeLevels.find((item) => item.id === event.target.value);
+                              if (!level) return;
+                              updateCondition(index, { right: { type: "saved_level", levelId: level.id, levelName: level.name, price: level.price } });
+                            }}
+                          >
+                            {activeLevels.length === 0 && <option value="00000000-0000-0000-0000-000000000000">No active saved levels</option>}
+                            {activeLevels.map((level) => <option key={level.id} value={level.id}>{level.name} (${level.price.toFixed(2)})</option>)}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+                    {targetValue(condition.right) === "average_volume" && (
                       <div className="condition-params">
                         <div className="field">
                           <label htmlFor={`multiplier-${index}`}>Average-volume multiplier</label>
@@ -208,6 +304,14 @@ export default function RuleBuilder() {
                         <div className="field">
                           <label htmlFor={`percent-${index}`}>Within percent</label>
                           <input id={`percent-${index}`} min="0.01" step="0.1" type="number" value={condition.params?.percent ?? 1} onChange={(event) => updateParams(index, { percent: Number(event.target.value) })} />
+                        </div>
+                      </div>
+                    )}
+                    {condition.operator === "within_dollars" && (
+                      <div className="condition-params">
+                        <div className="field">
+                          <label htmlFor={`dollars-${index}`}>Within dollars</label>
+                          <input id={`dollars-${index}`} min="0.01" step="0.01" type="number" value={condition.params?.dollars ?? 0.25} onChange={(event) => updateParams(index, { dollars: Number(event.target.value) })} />
                         </div>
                       </div>
                     )}

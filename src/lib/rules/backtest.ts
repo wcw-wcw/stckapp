@@ -1,5 +1,5 @@
 import { buildIndicatorStates, isMarketHours } from "@/lib/market/indicators";
-import type { AlertRule, BacktestResult, Candle } from "./types";
+import type { AlertRule, BacktestResult, Candle, RuleEvaluationContext } from "./types";
 import { evaluateRule } from "./evaluate";
 
 const horizons = [5, 15, 30, 60] as const;
@@ -9,7 +9,11 @@ const mean = (values: number[]) =>
 
 const percent = (value: number) => Number((value * 100).toFixed(2));
 
-export function backtestRule(rule: AlertRule, candles: Candle[]): BacktestResult {
+export function backtestRule(
+  rule: AlertRule,
+  candles: Candle[],
+  context?: RuleEvaluationContext,
+): BacktestResult {
   const states = buildIndicatorStates(candles);
   const signals: number[] = [];
   let lastSignalIndex = -Infinity;
@@ -20,7 +24,7 @@ export function backtestRule(rule: AlertRule, candles: Candle[]): BacktestResult
     if (
       outsideCooldown &&
       withinMarketHours &&
-      evaluateRule(rule, states[index], states[index - 1])
+      evaluateRule(rule, states[index], states[index - 1], context)
     ) {
       signals.push(index);
       lastSignalIndex = index;

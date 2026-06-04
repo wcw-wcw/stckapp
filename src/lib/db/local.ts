@@ -64,6 +64,20 @@ function ensureLocalSchemaUpgrades(database: DatabaseSync) {
       ON provider_error_logs (created_at DESC);
     CREATE INDEX IF NOT EXISTS provider_error_logs_symbol_created_idx
       ON provider_error_logs (symbol, created_at DESC);
+    CREATE TABLE IF NOT EXISTS symbol_levels (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      symbol TEXT NOT NULL REFERENCES supported_symbols(symbol),
+      name TEXT NOT NULL,
+      price REAL NOT NULL CHECK (price > 0),
+      level_type TEXT NOT NULL CHECK (level_type IN ('support', 'resistance', 'watch', 'other')),
+      notes TEXT,
+      expires_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS symbol_levels_user_symbol_idx
+      ON symbol_levels (user_id, symbol, created_at DESC);
   `);
 }
 

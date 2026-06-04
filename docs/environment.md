@@ -72,6 +72,10 @@ When `MARKET_DATA_PROVIDER=mock`, charts use generated local bars. When `MARKET_
 
 Intraday bars can look stale outside regular market hours because the latest provider bar may be from the prior session close. The chart API returns sanitized metadata and a warning when bars are empty, stale, degraded, or IEX/basic-limited.
 
+Charts show hover/crosshair OHLCV details, a subtle volume histogram, latest-bar metadata, and provider/range/interval/bar-count metadata.
+
+Saved symbol levels are persisted user-owned planning aids for supported symbols. They draw as chart price lines, but they are not trading advice, not quick alerts, not worker alerts, and not rule-builder inputs yet.
+
 SignalDesk does not store raw historical chart candles in the database. Charts are fetched or generated on demand. SignalDesk also does not execute trades and has no brokerage execution integration.
 
 ## Notifications

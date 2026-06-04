@@ -6,6 +6,7 @@ import { listRules, listWatchlist } from "@/lib/db/repositories";
 import { previewRule } from "@/lib/rules/preview";
 import { SUPPORTED_SYMBOLS, type Candle, type SupportedSymbol } from "@/lib/rules/types";
 import { SymbolChart } from "./symbol-chart";
+import { SymbolLevelsPanel } from "./symbol-levels-panel";
 
 const barTimeLabel = (timestamp: string) =>
   new Date(timestamp).toLocaleString("en-US", {
@@ -93,6 +94,7 @@ export default async function SymbolPage({
         </div>
         <SymbolChart symbol={symbol} />
       </section>
+      <SymbolLevelsPanel symbol={symbol} />
       <section className="card" style={{ marginTop: "1rem" }}>
         <div className="card-header"><h2>Rules monitoring {symbol}</h2><span className="small">{activeRules.length} total</span></div>
         <div className="rules-list">

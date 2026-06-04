@@ -15,6 +15,7 @@ export type {
   ProviderErrorLog,
   ReplayDataset,
   ReplayDatasetSummary,
+  SavedSymbolLevel,
   SavedRule,
   SessionUser,
   UserNotificationPreferences,
@@ -44,9 +45,9 @@ function callRepository<Key extends RepositoryMethod>(
   ...args: Parameters<SqliteRepository[Key]>
 ): Promise<Awaited<ReturnType<SqliteRepository[Key]>>> {
   const repository = getRepository();
-  return Promise.resolve((repository[method] as (...input: typeof args) => unknown)(...args)) as Promise<
-    Awaited<ReturnType<SqliteRepository[Key]>>
-  >;
+  return Promise.resolve().then(
+    () => (repository[method] as (...input: typeof args) => unknown)(...args),
+  ) as Promise<Awaited<ReturnType<SqliteRepository[Key]>>>;
 }
 
 export const findUserByEmail = (...args: Parameters<SqliteRepository["findUserByEmail"]>) =>
@@ -169,6 +170,16 @@ export const setWorkerLoopRunning = (
 ) => callRepository("setWorkerLoopRunning", ...args);
 export const getWorkerStatus = (...args: Parameters<SqliteRepository["getWorkerStatus"]>) =>
   callRepository("getWorkerStatus", ...args);
+export const listSymbolLevels = (...args: Parameters<SqliteRepository["listSymbolLevels"]>) =>
+  callRepository("listSymbolLevels", ...args);
+export const getSymbolLevel = (...args: Parameters<SqliteRepository["getSymbolLevel"]>) =>
+  callRepository("getSymbolLevel", ...args);
+export const createSymbolLevel = (...args: Parameters<SqliteRepository["createSymbolLevel"]>) =>
+  callRepository("createSymbolLevel", ...args);
+export const updateSymbolLevel = (...args: Parameters<SqliteRepository["updateSymbolLevel"]>) =>
+  callRepository("updateSymbolLevel", ...args);
+export const deleteSymbolLevel = (...args: Parameters<SqliteRepository["deleteSymbolLevel"]>) =>
+  callRepository("deleteSymbolLevel", ...args);
 export const listWatchlist = (...args: Parameters<SqliteRepository["listWatchlist"]>) =>
   callRepository("listWatchlist", ...args);
 export const addWatchlistSymbol = (...args: Parameters<SqliteRepository["addWatchlistSymbol"]>) =>

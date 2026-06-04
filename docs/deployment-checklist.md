@@ -28,6 +28,8 @@ SIGNALDESK_BASE_URL=https://your-app.example npm run health:check
 
 - Sign in and verify `/diagnostics`.
 - Open a supported symbol detail page and verify the chart controls load `1D`, `5D`, `1M`, `1m`, `5m`, `15m`, and `1h` data from `/api/market/bars/:symbol`.
+- Verify the chart hover/crosshair legend shows timestamp, OHLC, and volume, and that the volume histogram is visible without cluttering the candle view.
+- Create a saved symbol level, confirm it appears only for the signed-in user, and verify it draws as a horizontal planning line on the chart.
 
 ## Worker
 
@@ -54,7 +56,8 @@ npm run worker
 - Watch `/diagnostics` for DB provider status, active market provider, worker heartbeat freshness, provider errors, notification logs, and guardrail warnings.
 - Alpaca Basic/IEX data can differ from SIP or broker charts and may look stale outside regular market hours.
 - Chart bars are fetched on demand and raw historical candles are not stored in the database.
-- SignalDesk has no trade execution, saved chart levels, quick alerts, or arbitrary ticker support in this deployment pass.
+- Saved symbol levels are planning aids only. They are not trading advice, quick alerts, worker alerts, or rule-builder inputs yet.
+- SignalDesk has no trade execution, quick alerts, or arbitrary ticker support in this deployment pass.
 
 ## Rollback
 

@@ -88,7 +88,11 @@ Mock market data remains the default. Symbol detail pages fetch chart bars from 
 
 With `MARKET_DATA_PROVIDER=alpaca`, the chart endpoint requests Alpaca historical bars for the selected range and interval. With the default `ALPACA_DATA_FEED=iex`, Alpaca Basic/IEX data is not consolidated SIP data, so bars can differ from broker or full-market charts. Outside regular market hours, the latest intraday bar may be from the prior session close; the response metadata includes stale or degraded warnings instead of hiding that state.
 
-Raw historical chart candles are not stored in SQLite or Postgres in this pass. The app still has no trade execution, arbitrary ticker support, saved chart levels, or quick alerts.
+The chart includes hover/crosshair OHLCV details, a subtle volume histogram, latest-bar/provider/range/interval metadata, and sanitized stale/IEX caveats when applicable.
+
+Saved symbol levels are stored in SQLite or Postgres as user-owned planning aids. They can be created, edited, deleted, and drawn as horizontal price lines on supported-symbol charts. Saved levels are not trading advice, are not quick alerts, are not connected to the rule evaluator or worker yet, and do not execute trades.
+
+Raw historical chart candles are not stored in SQLite or Postgres in this pass. The app still has no trade execution, arbitrary ticker support, quick alerts, or saved-level rule integration.
 
 ## Safe Checks
 

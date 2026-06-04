@@ -43,6 +43,9 @@ export type SupportedSymbol = (typeof SUPPORTED_SYMBOLS)[number];
 export type Indicator = (typeof INDICATORS)[number];
 export type RuleOperator = (typeof OPERATORS)[number];
 
+export const SYMBOL_LEVEL_TYPES = ["support", "resistance", "watch", "other"] as const;
+export type SymbolLevelType = (typeof SYMBOL_LEVEL_TYPES)[number];
+
 export type Candle = {
   timestamp: string;
   open: number;

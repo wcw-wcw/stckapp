@@ -1,7 +1,15 @@
 import { createHash, randomInt, randomUUID } from "node:crypto";
 import { getDatabase } from "./local";
-import type { AlertRule, BacktestResult, Candle, SupportedSymbol } from "@/lib/rules/types";
+import type { AlertRule, BacktestResult, Candle, SupportedSymbol, SymbolLevelType } from "@/lib/rules/types";
 import type { IndicatorState } from "@/lib/rules/types";
+import {
+  assertSupportedLevelSymbol,
+  assertValidLevelPrice,
+  assertValidLevelType,
+  isLevelExpired,
+  type SavedSymbolLevel,
+  type SymbolLevelInput,
+} from "@/lib/symbol-levels";
 
 export type SessionUser = {
   id: string;
@@ -142,6 +150,8 @@ export type ProviderErrorLog = {
   createdAt: string;
 };
 
+export type { SavedSymbolLevel } from "@/lib/symbol-levels";
+
 type NotificationChannelRow = {
   id: string;
   type: NotificationChannelType;
@@ -205,6 +215,19 @@ type ReplayDatasetRow = {
   starts_at: string;
   ends_at: string;
   created_at: string;
+};
+
+type SymbolLevelRow = {
+  id: string;
+  user_id: string;
+  symbol: SupportedSymbol;
+  name: string;
+  price: number;
+  level_type: SymbolLevelType;
+  notes: string | null;
+  expires_at: string | null;
+  created_at: string;
+  updated_at: string;
 };
 
 const hashCode = (code: string) => createHash("sha256").update(code).digest("hex");
@@ -428,6 +451,27 @@ function mapReplayDataset(row: ReplayDatasetRow): ReplayDataset {
     ...mapReplayDatasetSummary(row),
     candles: JSON.parse(row.candles_json ?? "[]"),
   };
+}
+
+function mapSymbolLevel(row: SymbolLevelRow): SavedSymbolLevel {
+  return {
+    id: row.id,
+    symbol: row.symbol,
+    name: row.name,
+    price: Number(row.price),
+    levelType: row.level_type,
+    notes: row.notes ?? undefined,
+    expiresAt: row.expires_at,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    isExpired: isLevelExpired(row.expires_at),
+  };
+}
+
+function validateSymbolLevelInput(input: SymbolLevelInput | Partial<SymbolLevelInput>) {
+  if (input.symbol) assertSupportedLevelSymbol(input.symbol);
+  if (input.price !== undefined) assertValidLevelPrice(input.price);
+  if (input.levelType) assertValidLevelType(input.levelType);
 }
 
 export function listRules(userId: string) {
@@ -1304,6 +1348,100 @@ export function getWorkerStatus() {
        WHERE id = 1`,
     )
     .get() as WorkerStatus;
+}
+
+export function listSymbolLevels(userId: string, symbol: SupportedSymbol) {
+  assertSupportedLevelSymbol(symbol);
+  return (
+    getDatabase()
+      .prepare(
+        `SELECT id, user_id, symbol, name, price, level_type, notes, expires_at, created_at, updated_at
+         FROM symbol_levels
+         WHERE user_id = ? AND symbol = ?
+         ORDER BY price DESC, created_at DESC`,
+      )
+      .all(userId, symbol) as SymbolLevelRow[]
+  ).map(mapSymbolLevel);
+}
+
+export function getSymbolLevel(userId: string, levelId: string) {
+  const row = getDatabase()
+    .prepare(
+      `SELECT id, user_id, symbol, name, price, level_type, notes, expires_at, created_at, updated_at
+       FROM symbol_levels
+       WHERE id = ? AND user_id = ?`,
+    )
+    .get(levelId, userId) as SymbolLevelRow | undefined;
+  return row ? mapSymbolLevel(row) : null;
+}
+
+export function createSymbolLevel(userId: string, input: SymbolLevelInput) {
+  validateSymbolLevelInput(input);
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  getDatabase()
+    .prepare(
+      `INSERT INTO symbol_levels (
+        id, user_id, symbol, name, price, level_type, notes, expires_at, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .run(
+      id,
+      userId,
+      input.symbol,
+      input.name,
+      input.price,
+      input.levelType,
+      input.notes ?? null,
+      input.expiresAt ?? null,
+      now,
+      now,
+    );
+  return getSymbolLevel(userId, id);
+}
+
+export function updateSymbolLevel(
+  userId: string,
+  levelId: string,
+  input: Partial<SymbolLevelInput>,
+) {
+  validateSymbolLevelInput(input);
+  const existing = getSymbolLevel(userId, levelId);
+  if (!existing) return null;
+  const next = {
+    symbol: input.symbol ?? existing.symbol,
+    name: input.name ?? existing.name,
+    price: input.price ?? existing.price,
+    levelType: input.levelType ?? existing.levelType,
+    notes: input.notes === undefined ? existing.notes : input.notes,
+    expiresAt: input.expiresAt === undefined ? existing.expiresAt : input.expiresAt,
+  };
+  const now = new Date().toISOString();
+  getDatabase()
+    .prepare(
+      `UPDATE symbol_levels
+       SET symbol = ?, name = ?, price = ?, level_type = ?, notes = ?, expires_at = ?, updated_at = ?
+       WHERE id = ? AND user_id = ?`,
+    )
+    .run(
+      next.symbol,
+      next.name,
+      next.price,
+      next.levelType,
+      next.notes ?? null,
+      next.expiresAt ?? null,
+      now,
+      levelId,
+      userId,
+    );
+  return getSymbolLevel(userId, levelId);
+}
+
+export function deleteSymbolLevel(userId: string, levelId: string) {
+  const result = getDatabase()
+    .prepare("DELETE FROM symbol_levels WHERE id = ? AND user_id = ?")
+    .run(levelId, userId);
+  return rowCount(result.changes) > 0;
 }
 
 export function listWatchlist(userId: string) {

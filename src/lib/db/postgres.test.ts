@@ -36,4 +36,14 @@ describe("postgres database adapter safety", () => {
     expect(source).not.toContain("WHERE user_id = ?");
     expect(source).not.toContain("VALUES (?,");
   });
+
+  it("includes saved symbol level SQL and row mapping without SQLite placeholders", () => {
+    const source = readFileSync(new URL("./postgres-repositories.ts", import.meta.url), "utf8");
+
+    expect(source).toContain("FROM symbol_levels");
+    expect(source).toContain("level_type");
+    expect(source).toContain("price: Number(row.price)");
+    expect(source).toContain("WHERE id = $1 AND user_id = $2");
+    expect(source).not.toContain("FROM symbol_levels WHERE id = ? AND user_id = ?");
+  });
 });

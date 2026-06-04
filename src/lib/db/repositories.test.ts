@@ -4,11 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createAlertEvent,
   createNotificationChannel,
+  createSymbolLevel,
   createRule,
+  deleteSymbolLevel,
   getUserNotificationPreferences,
   getWorkerStatus,
+  listSymbolLevels,
   listNotificationLogs,
   recordWorkerTickStatus,
+  updateSymbolLevel,
   updateUserNotificationPreferences,
   type WorkerRule,
 } from "./repositories";
@@ -182,5 +186,103 @@ describe("notification preferences", () => {
       rules_evaluated: 2,
       cooldown_skips: 1,
     });
+  });
+});
+
+describe("saved symbol levels", () => {
+  let database: DatabaseSync;
+
+  beforeEach(() => {
+    database = setupDatabase();
+    database
+      .prepare(
+        "INSERT INTO users (id, email, password_hash, role, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+      .run("user-2", "other@example.com", "hash", "user", "2026-06-02T14:00:00.000Z", "2026-06-02T14:00:00.000Z");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    global.signalDeskDb = undefined;
+    database.close();
+  });
+
+  it("creates, updates, lists, and deletes user-owned symbol levels", async () => {
+    const created = await createSymbolLevel(userId, {
+      symbol: "SPY",
+      name: "Opening support",
+      price: 525.25,
+      levelType: "support",
+      notes: "Held twice",
+      expiresAt: "2026-06-05T20:00:00.000Z",
+    });
+
+    expect(created).toMatchObject({
+      symbol: "SPY",
+      name: "Opening support",
+      price: 525.25,
+      levelType: "support",
+      notes: "Held twice",
+      expiresAt: "2026-06-05T20:00:00.000Z",
+      isExpired: false,
+    });
+    expect(await listSymbolLevels(userId, "SPY")).toHaveLength(1);
+
+    const updated = await updateSymbolLevel(userId, created!.id, {
+      name: "Reclaimed support",
+      price: 526,
+      levelType: "watch",
+      notes: undefined,
+    });
+
+    expect(updated).toMatchObject({
+      id: created!.id,
+      name: "Reclaimed support",
+      price: 526,
+      levelType: "watch",
+    });
+    expect(await deleteSymbolLevel(userId, created!.id)).toBe(true);
+    expect(await listSymbolLevels(userId, "SPY")).toHaveLength(0);
+  });
+
+  it("keeps levels scoped to the owning user", async () => {
+    const created = await createSymbolLevel(userId, {
+      symbol: "SPY",
+      name: "Private level",
+      price: 500,
+      levelType: "watch",
+    });
+
+    expect(await listSymbolLevels("user-2", "SPY")).toHaveLength(0);
+    expect(await updateSymbolLevel("user-2", created!.id, { name: "Borrowed" })).toBeNull();
+    expect(await deleteSymbolLevel("user-2", created!.id)).toBe(false);
+    expect(await listSymbolLevels(userId, "SPY")).toHaveLength(1);
+  });
+
+  it("enforces supported symbols, positive prices, and valid level types", async () => {
+    await expect(
+      createSymbolLevel(userId, {
+        symbol: "BAD" as "SPY",
+        name: "Nope",
+        price: 100,
+        levelType: "watch",
+      }),
+    ).rejects.toThrow("Unsupported symbol.");
+    await expect(
+      createSymbolLevel(userId, {
+        symbol: "SPY",
+        name: "Nope",
+        price: 0,
+        levelType: "watch",
+      }),
+    ).rejects.toThrow("Price must be greater than 0.");
+    await expect(
+      createSymbolLevel(userId, {
+        symbol: "SPY",
+        name: "Nope",
+        price: 100,
+        levelType: "pivot" as "watch",
+      }),
+    ).rejects.toThrow("Unsupported level type.");
   });
 });

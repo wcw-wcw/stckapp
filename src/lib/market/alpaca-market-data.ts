@@ -103,6 +103,8 @@ export class AlpacaMarketDataService implements MarketDataService {
   async getHistoricalCandles(symbol: SupportedSymbol, count: number) {
     const end = new Date();
     const start = new Date(end.getTime() - Math.max(count * 6 * 60_000, 2 * 60 * 60_000));
+    // The lookback window is intentionally wider than count; request descending
+    // bars so Alpaca returns the latest candles, then restore ascending order.
     const candles = (await this.fetchHistoricalBars({
       symbol,
       timeframe: "1Min",

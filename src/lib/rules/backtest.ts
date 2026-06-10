@@ -33,6 +33,8 @@ export function backtestRule(
 
   const moves = (horizon: (typeof horizons)[number]) =>
     signals.map((index) => {
+      // A signal is known only after its candle closes, so modeled entry uses
+      // the next candle open instead of the signal candle close.
       const entry = candles[index + 1].open;
       return (candles[index + horizon].close - entry) / entry;
     });

@@ -11,3 +11,4 @@ data/*.sqlite-shm
 data/*.sqlite-wal
 README.md
 ROADMAP.md
+docs/ARCHITECTURE.md

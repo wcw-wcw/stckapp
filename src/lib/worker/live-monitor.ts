@@ -80,6 +80,8 @@ export function selectClosedCandleState(
   states: IndicatorState[],
   now = new Date(),
 ): ClosedCandleState | null {
+  // Ignore the current in-progress minute; rules evaluate only completed
+  // candles so live ticks and replay/backtest semantics stay comparable.
   const closedBefore = now.getTime() - 60_000;
   const currentIndex = states.findLastIndex(
     (state) => new Date(state.timestamp).getTime() <= closedBefore,

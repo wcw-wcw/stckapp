@@ -46,6 +46,8 @@ export function evaluateCondition(
   if (!previousValues) return false;
   const [previousLeft, previousRight] = previousValues;
 
+  // Cross/break operators are edge-triggered: they need the previous closed
+  // candle to be on the other side so a rule cannot fire on every later candle.
   switch (condition.operator) {
     case "crosses_above":
     case "breaks_above":

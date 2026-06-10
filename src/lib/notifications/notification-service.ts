@@ -42,6 +42,8 @@ export function maskNotificationDestination(type: NotificationChannelType, desti
     const url = new URL(destination);
     const parts = url.pathname.split("/").filter(Boolean);
     const webhookId = parts[2];
+    // Discord webhook URLs include a secret token after the id; logs should
+    // identify the destination without preserving that token.
     return webhookId ? `https://${url.hostname}/api/webhooks/${webhookId}/...` : "Discord webhook";
   } catch {
     return "Discord webhook";
